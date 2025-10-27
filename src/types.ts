@@ -3,10 +3,28 @@ export type InvitationTarget = {
   value: string;
 };
 
-export type InvitationGroup = {
-  id: string;
+/**
+ * GroupInput is used when creating JWTs - represents customer's group data
+ * Supports both 'id' (legacy) and 'group_id' (preferred) for backward compatibility
+ */
+export type GroupInput = {
   type: string;
+  id?: string;      // Legacy field (deprecated, use group_id)
+  groupId?: string; // Preferred: Customer's group ID
   name: string;
+};
+
+/**
+ * InvitationGroup represents a group in API responses
+ * This matches the MemberGroups table structure from the API
+ */
+export type InvitationGroup = {
+  id: string;        // Vortex internal UUID
+  accountId: string; // Vortex account ID
+  groupId: string;   // Customer's group ID (the ID they provided to Vortex)
+  type: string;      // Group type (e.g., "workspace", "team")
+  name: string;      // Group name
+  createdAt: string; // ISO 8601 timestamp when the group was created
 };
 
 export type InvitationAcceptance = {

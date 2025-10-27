@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { stringify as uuidStringify } from 'uuid';
-import { ApiRequestBody, ApiResponseJson, InvitationResult, AcceptInvitationRequest } from './types';
+import { ApiRequestBody, ApiResponseJson, InvitationResult, AcceptInvitationRequest, GroupInput } from './types';
 
 export class Vortex {
   constructor(private apiKey: string) { }
@@ -14,7 +14,7 @@ export class Vortex {
   }: {
     userId: string;
     identifiers: { type: 'email' | 'sms'; value: string }[];
-    groups: { type: string; id: string; name: string }[];
+    groups: GroupInput[];
     role?: string;
     attributes?: Record<string, any>;
   }): string {

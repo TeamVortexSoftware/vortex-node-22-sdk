@@ -44,9 +44,9 @@ const identifiers = [
 
 // groups are specific to your product. This list should be the groups that the current requesting user is a part of. It is up to you to define them if you so choose. Based on the values here, we can determine whether or not the user is allowed to invite others to a particular group
 const groups = [
-  { type: 'workspace', id: 'some-workspace-id', name: 'The greatest workspace...pause...in the world' },
-  { type: 'document', id: 'some-document-id', name: 'Ricky\'s grade 10 word papers' },
-  { type: 'document', id: 'another-document-id', name: 'Sunnyvale bylaws' }
+  { type: 'workspace', groupId: 'some-workspace-id', name: 'The greatest workspace...pause...in the world' },
+  { type: 'document', groupId: 'some-document-id', name: 'Ricky\'s grade 10 word papers' },
+  { type: 'document', groupId: 'another-document-id', name: 'Sunnyvale bylaws' }
 ];
 
 // If your product has the concept of user roles (admin, guest, member, etc), provide it here
@@ -122,7 +122,7 @@ function InviteWrapperComponent() {
   return (<VortexInvite
     widgetId={widgetId}
     jwt={jwt}
-    group={{ id: "workspace", type: "some-workspace-id", name: "The greatest workspace...pause...in the world" }}
+    group={{ type: "workspace", groupId: "some-workspace-id", name: "The greatest workspace...pause...in the world" }}
     templateVariables={{
       group_name: "The greatest workspace...pause...in the world",
       inviter_name: "James Lahey",

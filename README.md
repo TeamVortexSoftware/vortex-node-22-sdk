@@ -121,7 +121,7 @@ function InviteWrapperComponent() {
   const { jwt } = data;
   return (<VortexInvite
     widgetId={widgetId}
-    jwt={jwt}
+    user={jwt}
     group={{ type: "workspace", groupId: "some-workspace-id", name: "The greatest workspace...pause...in the world" }}
     templateVariables={{
       group_name: "The greatest workspace...pause...in the world",

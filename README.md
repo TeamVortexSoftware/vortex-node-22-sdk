@@ -27,6 +27,53 @@ Let's assume you have an express powered API and a user that is looking to invit
 
 You could populate the JWT in some set of initial data that your application already provides (recommended) or you could create an endpoint specifically to fetch the JWT on demand for use with the widget. For the purposes of this example, we'll create an endpoint to fetch the JWT.
 
+#### Current Format (Recommended)
+
+```ts
+const express = require('express');
+const app = express();
+const port = 3000;
+
+// Provide your API key however you see fit.
+const vortex = new Vortex(process.env.VORTEX_API_KEY);
+
+app.get('/vortex-jwt', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+
+  const token = vortex.generateJwt({
+    user: {
+      id: "user-123",
+      email: "user@example.com",
+      adminScopes: ['autoJoin']  // Optional: grants admin privileges for auto-joining
+    }
+  });
+
+  res.end(JSON.stringify({ jwt: token }));
+})
+
+app.listen(port, () => {
+  console.log(`Example app listening on port ${port}. Fetch example JWT by hitting /vortex-jwt`)
+})
+```
+
+You can also add extra properties to the JWT payload:
+
+```ts
+const token = vortex.generateJwt({
+  user: {
+    id: "user-123",
+    email: "user@example.com",
+    adminScopes: ['autoJoin']
+  },
+  role: "admin",
+  department: "Engineering"
+});
+```
+
+#### Legacy Format (Deprecated)
+
+The legacy format is still supported for backward compatibility but is deprecated. New integrations should use the simplified format above.
+
 ```ts
 const express = require('express');
 const app = express();
@@ -121,7 +168,7 @@ function InviteWrapperComponent() {
   const { jwt } = data;
   return (<VortexInvite
     widgetId={widgetId}
-    user={jwt}
+    jwt={jwt}
     group={{ type: "workspace", groupId: "some-workspace-id", name: "The greatest workspace...pause...in the world" }}
     templateVariables={{
       group_name: "The greatest workspace...pause...in the world",

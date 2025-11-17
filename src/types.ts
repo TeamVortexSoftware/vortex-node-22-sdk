@@ -65,3 +65,13 @@ export type AcceptInvitationRequest = {
 export type ApiResponseJson = InvitationResult | { invitations: InvitationResult[] } | {};
 
 export type ApiRequestBody = AcceptInvitationRequest | null;
+
+/**
+ * User type for JWT generation
+ */
+export type User = {
+  id: string;
+  email: string;
+  adminScopes?: string[];
+  [key: string]: any;
+};

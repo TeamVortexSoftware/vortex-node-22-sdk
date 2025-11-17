@@ -1,23 +1,30 @@
 import crypto from 'node:crypto';
 import { stringify as uuidStringify } from 'uuid';
-import { ApiRequestBody, ApiResponseJson, InvitationResult, AcceptInvitationRequest, GroupInput } from './types';
+import { ApiRequestBody, ApiResponseJson, InvitationResult, AcceptInvitationRequest, User } from './types';
 
 export class Vortex {
   constructor(private apiKey: string) { }
 
-  generateJwt({
-    userId,
-    identifiers,
-    groups,
-    role,
-    attributes,
-  }: {
-    userId: string;
-    identifiers: { type: 'email' | 'sms'; value: string }[];
-    groups: GroupInput[];
-    role?: string;
-    attributes?: Record<string, any>;
-  }): string {
+  /**
+   * Generate a JWT token for a user
+   *
+   * @param params - Object containing user and optional additional properties
+   * @param params.user - User object with id, email, and optional adminScopes
+   * @returns JWT token string
+   *
+   * @example
+   * ```typescript
+   * const token = vortex.generateJwt({
+   *   user: {
+   *     id: "user-123",
+   *     email: "user@example.com",
+   *     adminScopes: ['autoJoin']
+   *   }
+   * });
+   * ```
+   */
+  generateJwt(params: { user: User; [key: string]: any }): string {
+    const { user, ...rest } = params;
     const [prefix, encodedId, key] = this.apiKey.split('.'); // prefix is just VRTX
     if (!prefix || !encodedId || !key) {
       throw new Error('Invalid API key format');
@@ -40,14 +47,22 @@ export class Vortex {
       kid: id,
     };
 
-    const payload = {
-      userId,
-      groups,
-      role,
+    // Build payload with user data
+    const payload: any = {
+      userId: user.id,
+      userEmail: user.email,
       expires,
-      identifiers,
-      ...(attributes && Object.keys(attributes).length > 0 ? { attributes } : {}),
     };
+
+    // Add userIsAutoJoinAdmin if 'autoJoin' is in adminScopes
+    if (user.adminScopes?.includes('autoJoin')) {
+      payload.userIsAutoJoinAdmin = true;
+    }
+
+    // Add any additional properties from rest
+    if (rest && Object.keys(rest).length > 0) {
+      Object.assign(payload, rest);
+    }
 
     // 🧱 Step 3: Base64URL encode
     const headerB64 = Buffer.from(JSON.stringify(header)).toString('base64url');

@@ -55,6 +55,8 @@ export type InvitationResult = {
   projectId: string;
   groups: InvitationGroup[];
   accepts: InvitationAcceptance[];
+  expired: boolean;
+  expires?: string;
 };
 
 export type AcceptInvitationRequest = {

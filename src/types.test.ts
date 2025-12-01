@@ -55,6 +55,7 @@ describe('InvitationGroup Types', () => {
           },
         ],
         accepts: [],
+        expired: false,
       };
 
       const invitation: InvitationResult = apiResponse;

@@ -54,9 +54,9 @@ export class Vortex {
       expires,
     };
 
-    // Add userIsAutoJoinAdmin if 'autoJoin' is in adminScopes
-    if (user.adminScopes?.includes('autoJoin')) {
-      payload.userIsAutoJoinAdmin = true;
+    // Add adminScopes if present
+    if (user.adminScopes) {
+      payload.adminScopes = user.adminScopes;
     }
 
     // Add any additional properties from rest

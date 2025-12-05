@@ -9,7 +9,7 @@ export type InvitationTarget = {
  */
 export type GroupInput = {
   type: string;
-  id?: string;      // Legacy field (deprecated, use group_id)
+  id?: string; // Legacy field (deprecated, use group_id)
   groupId?: string; // Preferred: Customer's group ID
   name: string;
 };
@@ -19,11 +19,11 @@ export type GroupInput = {
  * This matches the MemberGroups table structure from the API
  */
 export type InvitationGroup = {
-  id: string;        // Vortex internal UUID
+  id: string; // Vortex internal UUID
   accountId: string; // Vortex account ID
-  groupId: string;   // Customer's group ID (the ID they provided to Vortex)
-  type: string;      // Group type (e.g., "workspace", "team")
-  name: string;      // Group name
+  groupId: string; // Customer's group ID (the ID they provided to Vortex)
+  type: string; // Group type (e.g., "workspace", "team")
+  name: string; // Group name
   createdAt: string; // ISO 8601 timestamp when the group was created
 };
 
@@ -33,7 +33,7 @@ export type InvitationAcceptance = {
   projectId: string;
   acceptedAt: string;
   target: InvitationTarget;
-}
+};
 
 export type InvitationResult = {
   id: string;
@@ -48,7 +48,14 @@ export type InvitationResult = {
   foreignCreatorId: string;
   invitationType: 'single_use' | 'multi_use';
   modifiedAt: string | null;
-  status: 'queued' | 'sending' | 'delivered' | 'accepted' | 'shared' | 'unfurled' | 'accepted_elsewhere';
+  status:
+    | 'queued'
+    | 'sending'
+    | 'delivered'
+    | 'accepted'
+    | 'shared'
+    | 'unfurled'
+    | 'accepted_elsewhere';
   target: InvitationTarget[];
   views: number;
   widgetConfigurationId: string;
@@ -76,4 +83,31 @@ export type User = {
   email: string;
   adminScopes?: string[];
   [key: string]: any;
+};
+
+/**
+ * Autojoin domain configuration
+ */
+export type AutojoinDomain = {
+  id: string;
+  domain: string;
+};
+
+/**
+ * Response from autojoin API endpoints
+ */
+export type AutojoinDomainsResponse = {
+  autojoinDomains: AutojoinDomain[];
+  invitation: InvitationResult | null;
+};
+
+/**
+ * Request body for configuring autojoin domains
+ */
+export type ConfigureAutojoinRequest = {
+  scope: string;
+  scopeType: string;
+  scopeName?: string;
+  domains: string[];
+  widgetId: string;
 };

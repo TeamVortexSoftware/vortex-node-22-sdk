@@ -3,7 +3,9 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "types": ["jest", "node"]
+    "lib": ["ES2020"],
+    "target": "ES2020",
+    "module": "ESNext"
   },
   "include": ["./src/**/*"],
   "exclude": ["node_modules", "dist"]

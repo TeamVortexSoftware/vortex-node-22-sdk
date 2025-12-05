@@ -17,7 +17,8 @@ npm install --save @teamvortexsoftware/vortex-node-22-sdk
 
 Once you have the SDK, [login](https://admin.vortexsoftware.com/signin) to Vortex and [create an API Key](https://admin.vortexsoftware.com/members/api-keys). Keep your API key safe! Vortex does not store the API key and it is not retrievable once it has been created. Also, it should be noted that the API key you use is scoped to the environment you're targeting. The environment is implied based on the API key used to sign JWTs and to make API requests.
 
-Your API key is used to 
+Your API key is used to
+
 - Sign JWTs for use with the Vortex Widget
 - Make API calls against the [Vortex API](https://api.vortexsoftware.com/api)
 
@@ -42,18 +43,18 @@ app.get('/vortex-jwt', (req, res) => {
 
   const token = vortex.generateJwt({
     user: {
-      id: "user-123",
-      email: "user@example.com",
-      adminScopes: ['autoJoin']  // Optional: grants admin privileges for auto-joining
-    }
+      id: 'user-123',
+      email: 'user@example.com',
+      adminScopes: ['autojoin'], // Optional: grants admin privileges for autojoining
+    },
   });
 
   res.end(JSON.stringify({ jwt: token }));
-})
+});
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}. Fetch example JWT by hitting /vortex-jwt`)
-})
+  console.log(`Example app listening on port ${port}. Fetch example JWT by hitting /vortex-jwt`);
+});
 ```
 
 You can also add extra properties to the JWT payload:
@@ -61,12 +62,12 @@ You can also add extra properties to the JWT payload:
 ```ts
 const token = vortex.generateJwt({
   user: {
-    id: "user-123",
-    email: "user@example.com",
-    adminScopes: ['autoJoin']
+    id: 'user-123',
+    email: 'user@example.com',
+    adminScopes: ['autojoin'],
   },
-  role: "admin",
-  department: "Engineering"
+  role: 'admin',
+  department: 'Engineering',
 });
 ```
 
@@ -86,14 +87,18 @@ const userId = 'users-id-in-my-system';
 const identifiers = [
   { type: 'email', value: 'users@emailaddress.com' },
   { type: 'email', value: 'someother@address.com' },
-  { type: 'sms', value: '18008675309' }
+  { type: 'sms', value: '18008675309' },
 ];
 
 // groups are specific to your product. This list should be the groups that the current requesting user is a part of. It is up to you to define them if you so choose. Based on the values here, we can determine whether or not the user is allowed to invite others to a particular group
 const groups = [
-  { type: 'workspace', groupId: 'some-workspace-id', name: 'The greatest workspace...pause...in the world' },
-  { type: 'document', groupId: 'some-document-id', name: 'Ricky\'s grade 10 word papers' },
-  { type: 'document', groupId: 'another-document-id', name: 'Sunnyvale bylaws' }
+  {
+    type: 'workspace',
+    groupId: 'some-workspace-id',
+    name: 'The greatest workspace...pause...in the world',
+  },
+  { type: 'document', groupId: 'some-document-id', name: "Ricky's grade 10 word papers" },
+  { type: 'document', groupId: 'another-document-id', name: 'Sunnyvale bylaws' },
 ];
 
 // If your product has the concept of user roles (admin, guest, member, etc), provide it here
@@ -104,17 +109,21 @@ const vortex = new Vortex(process.env.VORTEX_API_KEY);
 
 app.get('/vortex-jwt', (req, res) => {
   res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({ jwt: vortex.generateJwt({
-    userId,
-    identifiers,
-    groups,
-    role
-  })}));
-})
+  res.end(
+    JSON.stringify({
+      jwt: vortex.generateJwt({
+        userId,
+        identifiers,
+        groups,
+        role,
+      }),
+    })
+  );
+});
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}. Fetch example JWT by hitting /vortex-jwt`)
-})
+  console.log(`Example app listening on port ${port}. Fetch example JWT by hitting /vortex-jwt`);
+});
 ```
 
 Now, you can utilize that JWT endpoint in conjuction with the Vortex widget
@@ -122,7 +131,7 @@ Now, you can utilize that JWT endpoint in conjuction with the Vortex widget
 Here's an example hook:
 
 ```ts
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
 export function useVortexJwt() {
   const [data, setData] = useState<any>(null);
@@ -134,7 +143,7 @@ export function useVortexJwt() {
 
     async function fetchJwt() {
       try {
-        const res = await fetch("/vortex-jwt");
+        const res = await fetch('/vortex-jwt');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         if (!cancelled) setData(json);
@@ -179,6 +188,7 @@ function InviteWrapperComponent() {
   />);
 }
 ```
+
 ### Fetch an invitation by ID
 
 When a shared invitation link or an invitaion link sent via email is clicked, the user who clicks it is redirected to the landing page you set in the widget configurator. For instance, if you set http://localhost:3000/invite/landing as the landing page and the invitation being clicked has an id of deadbeef-dead-4bad-8dad-c001d00dc0de, the user who clicks the invitation link will land on http://localhost:3000/invite/landing?invitationId=deadbeef-dead-4bad-8dad-c001d00dc0de
@@ -204,8 +214,9 @@ app.get('/invite/landing', async (req, res) => {
   // For the sake of simplicity, we'll simply return the raw JSON
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify(invitation));
-})
+});
 ```
+
 ### View invitations by target (email address for example)
 
 Depending on your use case, you may want to accept all outstanding invitations to a given user when they sign up for your service. If you don't want to auto accept, you may want to present the new user with a list of all invitations that target them. Either way, the example below shows how you fetch these invitations once you know how to identify (via email, sms or others in the future) a new user to your product.
@@ -229,8 +240,9 @@ app.get('/invitations/by-email', async (req, res) => {
   // For the sake of simplicity, we'll simply return the raw JSON
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify(invitations));
-})
+});
 ```
+
 ### Accept invitations
 
 This is how you'd accept one or more invitations with the SDK. You want this as part of your signup flow more than likely. When someone clicks on an invitation link, we redirect to the landing page you specified in the widget configuration. Ultimately, the user will sign up with your service and that is when you create the relationship between the newly created user in your system and whatever grouping defined in the invitation itself.
@@ -246,12 +258,12 @@ app.post('/signup', async (req, res) => {
   }
 
   // YOUR signup logic, whatever it may be
-  await myApp.doSignupLogic(email); 
+  await myApp.doSignupLogic(email);
 
   // you may want to do this even if the user is signing up without clicking an invitaiton link
   const invitations = await vortex.getInvitationsByTarget('email', email);
 
-  // Assume that your application may pass the original invitationId from the 
+  // Assume that your application may pass the original invitationId from the
   // landing page registered with the configured widget
   const invitationId = req.body.invitationId;
 
@@ -260,16 +272,17 @@ app.post('/signup', async (req, res) => {
     uniqueInvitationIds.push(invitationId);
   }
 
-  const acceptedInvitations = await vortex.acceptInvitations(
-    uniqueInvitationIds,
-    { type: 'email', value: email }
-  );
-  
+  const acceptedInvitations = await vortex.acceptInvitations(uniqueInvitationIds, {
+    type: 'email',
+    value: email,
+  });
+
   // continue with post-signup activity. perhaps redirect to your logged in landing page
 
   res.redirect(302, '/app');
-})
+});
 ```
+
 ### Fetch invitations by group
 
 Perhaps you want to allow your users to see all outstanding invitations for a group that they are a member of. Or perhaps you want this exclusively for admins of the group. However you choose to do it, this SDK feature will allow you to fetch all outstanding invitations for a group.
@@ -286,8 +299,9 @@ app.get('/invitations/by-group', async (req, res) => {
 
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify(invitations));
-})
+});
 ```
+
 ### Reinvite
 
 You may want to allow your users to resend an existing invitation. Allowing for this will increase the conversion chances of a stale invitation. Perhaps you display a list of outstanding invites and allow for a reinvite based on that list.
@@ -304,8 +318,9 @@ app.post('/invitations/reinvite', async (req, res) => {
 
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify(invitation));
-})
+});
 ```
+
 ### Revoke invitation
 
 In addition to reinvite, you may want to present your users (or perhaps just admins) with the ability to revoke outstanding invitations.
@@ -322,13 +337,15 @@ app.post('/invitations/revoke', async (req, res) => {
 
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify({}));
-})
+});
 ```
+
 ### Delete invitations by group
 
 Your product may allow for your users to delete the underlying resource that is tied to one or more invitations. For instance, say your product has the concept of a 'workspace' and your invitations are created specifying a particular workspace associated with each invitation. Then, at some point in the future, the admin of the workspace decides to delete it. This means all invitations associated with that workspace are now invalid and need to be removed so that reminders don't go out for any outstanding invite to the now deleted workspace.
 
 Here is how to clean them up when the workspace is deleted.
+
 ```ts
 app.delete('/workspace/:workspaceId', async (req, res) => {
   const { workspaceId } = req.params;
@@ -341,5 +358,5 @@ app.delete('/workspace/:workspaceId', async (req, res) => {
 
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify({}));
-})
+});
 ```

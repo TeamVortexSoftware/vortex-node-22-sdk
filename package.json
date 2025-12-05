@@ -27,7 +27,7 @@
     "check-types": "tsc --noEmit",
     "distclean": "rm -rf ./dist ./dist.d",
     "clean": "rm -rf ./dist",
-    "dev": "",
+    "dev": "tsup --watch",
     "test": "jest",
     "package": "pnpm run build && cd dist/vortex-node-22-sdk && npm pack",
     "build": "tsup"
@@ -49,12 +49,14 @@
     "@jest/globals": "29.7.0",
     "@teamvortexsoftware/eslint-config": "workspace:*",
     "@teamvortexsoftware/typescript-config": "workspace:*",
+    "@types/node": "^20.19.25",
     "eslint": "catalog:",
     "jest": "29.7.0",
+    "ts-jest": "catalog:",
     "tsup": "^8.5.0",
     "typescript-eslint": "catalog:"
   },
   "dependencies": {
-    "uuid": "^13.0.0"
+    "uuid": "^11.1.0"
   }
 }

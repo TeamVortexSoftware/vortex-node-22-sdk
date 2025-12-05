@@ -1,9 +1,17 @@
 import crypto from 'node:crypto';
 import { stringify as uuidStringify } from 'uuid';
-import { ApiRequestBody, ApiResponseJson, InvitationResult, AcceptInvitationRequest, User } from './types';
+import {
+  ApiRequestBody,
+  ApiResponseJson,
+  InvitationResult,
+  AcceptInvitationRequest,
+  User,
+  AutojoinDomainsResponse,
+  ConfigureAutojoinRequest,
+} from './types';
 
 export class Vortex {
-  constructor(private apiKey: string) { }
+  constructor(private apiKey: string) {}
 
   /**
    * Generate a JWT token for a user
@@ -18,7 +26,7 @@ export class Vortex {
    *   user: {
    *     id: "user-123",
    *     email: "user@example.com",
-   *     adminScopes: ['autoJoin']
+   *     adminScopes: ['autojoin']
    *   }
    * });
    * ```
@@ -52,11 +60,18 @@ export class Vortex {
       userId: user.id,
       userEmail: user.email,
       expires,
+      // Include identifiers array for widget compatibility (VrtxAutojoin checks this)
+      identifiers: user.email ? [{ type: 'email', value: user.email }] : [],
     };
 
     // Add adminScopes if present
     if (user.adminScopes) {
       payload.adminScopes = user.adminScopes;
+      // Add widget compatibility fields for autojoin admin
+      if (user.adminScopes.includes('autojoin')) {
+        payload.userIsAutojoinAdmin = true;
+        payload.role = 'admin'; // VrtxAutojoin checks parsedJwt.role === 'admin'
+      }
     }
 
     // Add any additional properties from rest
@@ -78,13 +93,15 @@ export class Vortex {
   }
 
   async vortexApiRequest(options: {
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-    path: string,
-    body?: ApiRequestBody,
-    queryParams?: Record<string, string | number | boolean>,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+    path: string;
+    body?: ApiRequestBody;
+    queryParams?: Record<string, string | number | boolean>;
   }): Promise<ApiResponseJson> {
     const { method, path, body, queryParams } = options;
-    const url = new URL(`${process.env.VORTEX_API_BASE_URL || 'https://api.vortexsoftware.com'}${path}`);
+    const url = new URL(
+      `${process.env.VORTEX_API_BASE_URL || 'https://api.vortexsoftware.com'}${path}`
+    );
     if (queryParams) {
       Object.entries(queryParams).forEach(([key, value]) => {
         url.searchParams.append(key, String(value));
@@ -100,7 +117,9 @@ export class Vortex {
     });
     if (!results.ok) {
       const errorBody = await results.text();
-      throw new Error(`Vortex API request failed: ${results.status} ${results.statusText} - ${errorBody}`);
+      throw new Error(
+        `Vortex API request failed: ${results.status} ${results.statusText} - ${errorBody}`
+      );
     }
 
     // Check if response has content to parse
@@ -127,15 +146,18 @@ export class Vortex {
     }
   }
 
-  async getInvitationsByTarget(targetType: 'email' | 'username' | 'phoneNumber', targetValue: string): Promise<InvitationResult[]> {
-    const response = await this.vortexApiRequest({
+  async getInvitationsByTarget(
+    targetType: 'email' | 'username' | 'phoneNumber',
+    targetValue: string
+  ): Promise<InvitationResult[]> {
+    const response = (await this.vortexApiRequest({
       method: 'GET',
-      path: '/api/v1/invitations?targetType',
+      path: '/api/v1/invitations',
       queryParams: {
         targetType,
         targetValue,
-      }
-    }) as { invitations: InvitationResult[] };
+      },
+    })) as { invitations: InvitationResult[] };
     return response.invitations;
   }
 
@@ -157,14 +179,14 @@ export class Vortex {
     invitationIds: string[],
     target: { type: 'email' | 'username' | 'phoneNumber'; value: string }
   ): Promise<InvitationResult> {
-    const response = await this.vortexApiRequest({
+    const response = (await this.vortexApiRequest({
       method: 'POST',
       body: {
         invitationIds,
         target,
       } as AcceptInvitationRequest,
       path: `/api/v1/invitations/accept`,
-    }) as InvitationResult;
+    })) as InvitationResult;
     return response;
   }
 
@@ -176,10 +198,10 @@ export class Vortex {
   }
 
   async getInvitationsByGroup(groupType: string, groupId: string): Promise<InvitationResult[]> {
-    const response = await this.vortexApiRequest({
+    const response = (await this.vortexApiRequest({
       method: 'GET',
       path: `/api/v1/invitations/by-group/${groupType}/${groupId}`,
-    }) as { invitations: InvitationResult[] };
+    })) as { invitations: InvitationResult[] };
     return response.invitations;
   }
 
@@ -188,5 +210,59 @@ export class Vortex {
       method: 'POST',
       path: `/api/v1/invitations/${invitationId}/reinvite`,
     }) as Promise<InvitationResult>;
+  }
+
+  /**
+   * Get autojoin domains configured for a specific scope
+   *
+   * @param scopeType - The type of scope (e.g., "organization", "team", "project")
+   * @param scope - The scope identifier (customer's group ID)
+   * @returns Autojoin domains and associated invitation
+   *
+   * @example
+   * ```typescript
+   * const result = await vortex.getAutojoinDomains('organization', 'acme-org');
+   * console.log(result.autojoinDomains); // [{ id: '...', domain: 'acme.com' }]
+   * ```
+   */
+  async getAutojoinDomains(scopeType: string, scope: string): Promise<AutojoinDomainsResponse> {
+    return this.vortexApiRequest({
+      method: 'GET',
+      path: `/api/v1/invitations/by-scope/${encodeURIComponent(scopeType)}/${encodeURIComponent(scope)}/autojoin`,
+    }) as Promise<AutojoinDomainsResponse>;
+  }
+
+  /**
+   * Configure autojoin domains for a specific scope
+   *
+   * This endpoint syncs autojoin domains - it will add new domains, remove domains
+   * not in the provided list, and deactivate the autojoin invitation if all domains
+   * are removed (empty array).
+   *
+   * @param params - Configuration parameters
+   * @param params.scope - The scope identifier (customer's group ID)
+   * @param params.scopeType - The type of scope (e.g., "organization", "team")
+   * @param params.scopeName - Optional display name for the scope
+   * @param params.domains - Array of domains to configure for autojoin
+   * @param params.widgetId - The widget configuration ID
+   * @returns Updated autojoin domains and associated invitation
+   *
+   * @example
+   * ```typescript
+   * const result = await vortex.configureAutojoin({
+   *   scope: 'acme-org',
+   *   scopeType: 'organization',
+   *   scopeName: 'Acme Corporation',
+   *   domains: ['acme.com', 'acme.org'],
+   *   widgetId: 'widget-123',
+   * });
+   * ```
+   */
+  async configureAutojoin(params: ConfigureAutojoinRequest): Promise<AutojoinDomainsResponse> {
+    return this.vortexApiRequest({
+      method: 'POST',
+      path: '/api/v1/invitations/autojoin',
+      body: params as unknown as ApiRequestBody,
+    }) as Promise<AutojoinDomainsResponse>;
   }
 }

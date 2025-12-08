@@ -110,4 +110,5 @@ export type ConfigureAutojoinRequest = {
   scopeName?: string;
   domains: string[];
   widgetId: string;
+  metadata?: Record<string, any>;
 };

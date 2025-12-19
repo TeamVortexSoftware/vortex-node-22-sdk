@@ -2,7 +2,7 @@
   "name": "@teamvortexsoftware/vortex-node-22-sdk",
   "description": "Vortex Node 22 SDK",
   "author": "@teamvortexsoftware",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

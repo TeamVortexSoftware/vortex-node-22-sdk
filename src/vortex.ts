@@ -6,8 +6,10 @@ import {
   InvitationResult,
   AcceptInvitationRequest,
   User,
+  AcceptUser,
   AutojoinDomainsResponse,
   ConfigureAutojoinRequest,
+  InvitationTarget,
 } from './types';
 
 export class Vortex {
@@ -175,15 +177,109 @@ export class Vortex {
     }) as Promise<{}>;
   }
 
+  /**
+   * Accept invitations using the new User format (preferred)
+   * @param invitationIds - Array of invitation IDs to accept
+   * @param user - User object with email or phone (and optional name)
+   * @returns Invitation result
+   * @example
+   * ```typescript
+   * await vortex.acceptInvitations(['inv-123'], { email: 'user@example.com', name: 'John' });
+   * ```
+   */
+  async acceptInvitations(invitationIds: string[], user: AcceptUser): Promise<InvitationResult>;
+
+  /**
+   * Accept invitations using legacy target format (deprecated)
+   * @deprecated Use the User format instead: acceptInvitations(invitationIds, { email: 'user@example.com' })
+   * @param invitationIds - Array of invitation IDs to accept
+   * @param target - Legacy target object with type and value
+   * @returns Invitation result
+   */
   async acceptInvitations(
     invitationIds: string[],
-    target: { type: 'email' | 'username' | 'phoneNumber'; value: string }
+    target: InvitationTarget
+  ): Promise<InvitationResult>;
+
+  /**
+   * Accept invitations using multiple legacy targets (deprecated)
+   * Will call the accept endpoint once per target
+   * @deprecated Use the User format instead: acceptInvitations(invitationIds, { email: 'user@example.com' })
+   * @param invitationIds - Array of invitation IDs to accept
+   * @param targets - Array of legacy target objects
+   * @returns Invitation result from the last acceptance
+   */
+  async acceptInvitations(
+    invitationIds: string[],
+    targets: InvitationTarget[]
+  ): Promise<InvitationResult>;
+
+  // Implementation
+  async acceptInvitations(
+    invitationIds: string[],
+    userOrTarget: AcceptUser | InvitationTarget | InvitationTarget[]
   ): Promise<InvitationResult> {
+    // Handle array of targets (legacy, call once per target)
+    if (Array.isArray(userOrTarget)) {
+      console.warn(
+        '[Vortex SDK] DEPRECATED: Passing an array of targets is deprecated. Use the User format instead: acceptInvitations(invitationIds, { email: "user@example.com" })'
+      );
+      let lastResult: InvitationResult | undefined;
+      for (const target of userOrTarget) {
+        lastResult = await this.acceptInvitations(invitationIds, target);
+      }
+      if (!lastResult) {
+        throw new Error('No targets provided');
+      }
+      return lastResult;
+    }
+
+    // Check if it's a legacy target format (has 'type' and 'value' properties)
+    const isLegacyTarget = 'type' in userOrTarget && 'value' in userOrTarget;
+
+    if (isLegacyTarget) {
+      console.warn(
+        '[Vortex SDK] DEPRECATED: Passing a target object is deprecated. Use the User format instead: acceptInvitations(invitationIds, { email: "user@example.com" })'
+      );
+
+      // Convert legacy target to User format
+      const target = userOrTarget as InvitationTarget;
+      const user: AcceptUser = {};
+
+      if (target.type === 'email') {
+        user.email = target.value;
+      } else if (target.type === 'sms' || target.type === 'phoneNumber') {
+        user.phone = target.value;
+      } else {
+        // For other types (like 'username'), try to use as email
+        user.email = target.value;
+      }
+
+      // Make request with User format
+      const response = (await this.vortexApiRequest({
+        method: 'POST',
+        body: {
+          invitationIds,
+          user,
+        } as AcceptInvitationRequest,
+        path: `/api/v1/invitations/accept`,
+      })) as InvitationResult;
+      return response;
+    }
+
+    // New User format
+    const user = userOrTarget as AcceptUser;
+
+    // Validate that either email or phone is provided
+    if (!user.email && !user.phone) {
+      throw new Error('User must have either email or phone');
+    }
+
     const response = (await this.vortexApiRequest({
       method: 'POST',
       body: {
         invitationIds,
-        target,
+        user,
       } as AcceptInvitationRequest,
       path: `/api/v1/invitations/accept`,
     })) as InvitationResult;

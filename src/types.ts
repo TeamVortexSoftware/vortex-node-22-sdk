@@ -66,17 +66,33 @@ export type InvitationResult = {
   expires?: string;
 };
 
+/**
+ * User type for accepting invitations
+ * Requires either email or phone (or both)
+ */
+export type AcceptUser = {
+  email?: string;
+  phone?: string;
+  name?: string;
+};
+
 export type AcceptInvitationRequest = {
+  invitationIds: string[];
+  user: AcceptUser;
+};
+
+export type AcceptInvitationRequestLegacy = {
   invitationIds: string[];
   target: InvitationTarget;
 };
 
 export type ApiResponseJson = InvitationResult | { invitations: InvitationResult[] } | {};
 
-export type ApiRequestBody = AcceptInvitationRequest | null;
+export type ApiRequestBody = AcceptInvitationRequest | AcceptInvitationRequestLegacy | null;
 
 /**
  * User type for JWT generation
+ * Requires both id and email
  */
 export type User = {
   id: string;

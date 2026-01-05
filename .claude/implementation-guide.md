@@ -199,7 +199,7 @@ export async function handleGetInvitationsByTarget(
     }
 
     const invitations = await vortexClient.getInvitationsByTarget({
-      type: type as 'email' | 'sms',
+      type: type as 'email' | 'phone',
       value
     });
 
@@ -264,10 +264,10 @@ export async function handleAcceptInvitations(
     req.on('data', chunk => body += chunk);
     await new Promise(resolve => req.on('end', resolve));
 
-    const { invitationIds, target } = JSON.parse(body);
+    const { invitationIds, user } = JSON.parse(body);
 
     // 1. Mark invitations as accepted in Vortex
-    await vortexClient.acceptInvitations({ invitationIds, target });
+    await vortexClient.acceptInvitations(invitationIds, user);
 
     // 2. CRITICAL - Add to your database
     const invitations = await Promise.all(

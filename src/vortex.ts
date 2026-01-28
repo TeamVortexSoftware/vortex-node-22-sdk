@@ -10,6 +10,8 @@ import {
   AutojoinDomainsResponse,
   ConfigureAutojoinRequest,
   InvitationTarget,
+  CreateInvitationRequest,
+  CreateInvitationResponse,
 } from './types';
 
 export class Vortex {
@@ -65,6 +67,16 @@ export class Vortex {
       // Include identifiers array for widget compatibility (VrtxAutojoin checks this)
       identifiers: user.email ? [{ type: 'email', value: user.email }] : [],
     };
+
+    // Add name if present
+    if (user.name) {
+      payload.name = user.name;
+    }
+
+    // Add avatarUrl if present
+    if (user.avatarUrl) {
+      payload.avatarUrl = user.avatarUrl;
+    }
 
     // Add adminScopes if present
     if (user.adminScopes) {
@@ -248,7 +260,7 @@ export class Vortex {
 
       if (target.type === 'email') {
         user.email = target.value;
-      } else if (target.type === 'sms' || target.type === 'phoneNumber') {
+      } else if (target.type === 'phone' || target.type === 'phoneNumber') {
         user.phone = target.value;
       } else {
         // For other types (like 'username'), try to use as email
@@ -360,5 +372,54 @@ export class Vortex {
       path: '/api/v1/invitations/autojoin',
       body: params as unknown as ApiRequestBody,
     }) as Promise<AutojoinDomainsResponse>;
+  }
+
+  /**
+   * Create an invitation from your backend
+   *
+   * This method allows you to create invitations programmatically using your API key,
+   * without requiring a user JWT token. This is useful for server-side invitation
+   * creation, such as "People You May Know" flows or admin-initiated invitations.
+   *
+   * @param params - Invitation parameters
+   * @param params.widgetConfigurationId - The widget configuration ID to use
+   * @param params.target - The target of the invitation (who is being invited)
+   * @param params.target.type - 'email', 'phone', or 'internal'
+   * @param params.target.value - Email address, phone number, or internal user ID
+   * @param params.inviter - Information about the user creating the invitation
+   * @param params.inviter.userId - Your internal user ID for the inviter
+   * @param params.inviter.userEmail - Optional email of the inviter
+   * @param params.inviter.name - Optional display name of the inviter
+   * @param params.groups - Optional groups/scopes to associate with the invitation
+   * @param params.source - Optional source for analytics (defaults to 'api')
+   * @param params.templateVariables - Optional template variables for email customization
+   * @param params.metadata - Optional metadata passed through to webhooks
+   * @returns Created invitation with ID, short link, status, and creation timestamp
+   *
+   * @example
+   * ```typescript
+   * // Create an email invitation
+   * const invitation = await vortex.createInvitation({
+   *   widgetConfigurationId: 'widget-config-123',
+   *   target: { type: 'email', value: 'invitee@example.com' },
+   *   inviter: { userId: 'user-456', userEmail: 'inviter@example.com', name: 'John Doe' },
+   *   groups: [{ type: 'team', groupId: 'team-789', name: 'Engineering' }],
+   * });
+   *
+   * // Create an internal invitation (PYMK flow - no email sent)
+   * const pymkInvitation = await vortex.createInvitation({
+   *   widgetConfigurationId: 'widget-config-123',
+   *   target: { type: 'internal', value: 'internal-user-id-abc' },
+   *   inviter: { userId: 'user-456' },
+   *   source: 'pymk',
+   * });
+   * ```
+   */
+  async createInvitation(params: CreateInvitationRequest): Promise<CreateInvitationResponse> {
+    return this.vortexApiRequest({
+      method: 'POST',
+      path: '/api/v1/invitations',
+      body: params as unknown as ApiRequestBody,
+    }) as Promise<CreateInvitationResponse>;
   }
 }

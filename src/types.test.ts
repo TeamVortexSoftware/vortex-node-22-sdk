@@ -35,7 +35,7 @@ describe('InvitationGroup Types', () => {
         createdAt: '2025-01-27T12:00:00.000Z',
         deactivated: false,
         deliveryCount: 1,
-        deliveryTypes: ['email'] as ('email' | 'sms' | 'share')[],
+        deliveryTypes: ['email'] as ('email' | 'phone' | 'share' | 'internal')[],
         foreignCreatorId: 'user-123',
         invitationType: 'single_use' as 'single_use' | 'multi_use',
         modifiedAt: null,

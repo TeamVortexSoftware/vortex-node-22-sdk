@@ -4,6 +4,21 @@ This package provides the Vortex Node/Typescript SDK.
 
 With this module, you can both generate a JWT for use with the Vortex Widget and make API calls to the Vortex API.
 
+## Features
+
+### Invitation Delivery Types
+
+Vortex supports multiple delivery methods for invitations:
+
+- **`email`** - Email invitations sent by Vortex (includes reminders and nudges)
+- **`phone`** - Phone invitations sent by the user/customer
+- **`share`** - Shareable invitation links for social sharing
+- **`internal`** - Internal invitations managed entirely by your application
+  - No email/SMS communication triggered by Vortex
+  - Target value can be any customer-defined identifier (UUID, string, number)
+  - Useful for in-app invitation flows where you handle the delivery
+  - Example use case: In-app notifications, dashboard invites, etc.
+
 ## Use Cases and Examples
 
 ### Install the NodeJS SDK
@@ -45,7 +60,9 @@ app.get('/vortex-jwt', (req, res) => {
     user: {
       id: 'user-123',
       email: 'user@example.com',
-      adminScopes: ['autojoin'], // Optional: grants admin privileges for autojoining
+      name: 'Jane Doe',                                      // Optional: user's display name
+      avatarUrl: 'https://example.com/avatars/jane.jpg',    // Optional: user's avatar URL
+      adminScopes: ['autojoin'],                             // Optional: grants admin privileges for autojoining
     },
   });
 
@@ -56,6 +73,30 @@ app.listen(port, () => {
   console.log(`Example app listening on port ${port}. Fetch example JWT by hitting /vortex-jwt`);
 });
 ```
+
+#### User Profile Information (Optional)
+
+You can optionally include the user's name and avatar URL in JWTs. This information will be stored and returned when fetching invitations created by this user.
+
+```ts
+const token = vortex.generateJwt({
+  user: {
+    id: 'user-123',
+    email: 'user@example.com',
+    name: 'Jane Doe',                                    // Optional
+    avatarUrl: 'https://example.com/avatars/jane.jpg',  // Optional
+  },
+});
+```
+
+**Requirements:**
+- `name`: Optional string (max 200 characters)
+- `avatarUrl`: Optional HTTPS URL (max 2000 characters)
+- Both fields are optional and can be omitted
+
+**Validation:**
+- Invalid or non-HTTPS avatar URLs will be ignored with a warning
+- Authentication will succeed even with invalid avatar URLs
 
 You can also add extra properties to the JWT payload:
 
@@ -87,7 +128,7 @@ const userId = 'users-id-in-my-system';
 const identifiers = [
   { type: 'email', value: 'users@emailaddress.com' },
   { type: 'email', value: 'someother@address.com' },
-  { type: 'sms', value: '18008675309' },
+  { type: 'phone', value: '18008675309' },
 ];
 
 // groups are specific to your product. This list should be the groups that the current requesting user is a part of. It is up to you to define them if you so choose. Based on the values here, we can determine whether or not the user is allowed to invite others to a particular group
@@ -219,7 +260,7 @@ app.get('/invite/landing', async (req, res) => {
 
 ### View invitations by target (email address for example)
 
-Depending on your use case, you may want to accept all outstanding invitations to a given user when they sign up for your service. If you don't want to auto accept, you may want to present the new user with a list of all invitations that target them. Either way, the example below shows how you fetch these invitations once you know how to identify (via email, sms or others in the future) a new user to your product.
+Depending on your use case, you may want to accept all outstanding invitations to a given user when they sign up for your service. If you don't want to auto accept, you may want to present the new user with a list of all invitations that target them. Either way, the example below shows how you fetch these invitations once you know how to identify (via email, phone or others in the future) a new user to your product.
 
 ```ts
 app.get('/invitations/by-email', async (req, res) => {

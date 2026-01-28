@@ -1,5 +1,5 @@
 export type InvitationTarget = {
-  type: 'email' | 'sms';
+  type: 'email' | 'phone';
   value: string;
 };
 
@@ -44,7 +44,7 @@ export type InvitationResult = {
   createdAt: string;
   deactivated: boolean;
   deliveryCount: number;
-  deliveryTypes: ('email' | 'sms' | 'share')[];
+  deliveryTypes: ('email' | 'phone' | 'share' | 'internal')[];
   foreignCreatorId: string;
   invitationType: 'single_use' | 'multi_use';
   modifiedAt: string | null;
@@ -64,6 +64,9 @@ export type InvitationResult = {
   accepts: InvitationAcceptance[];
   expired: boolean;
   expires?: string;
+  source?: string;
+  creatorName?: string | null;
+  creatorAvatarUrl?: string | null;
 };
 
 /**
@@ -97,6 +100,8 @@ export type ApiRequestBody = AcceptInvitationRequest | AcceptInvitationRequestLe
 export type User = {
   id: string;
   email: string;
+  name?: string;
+  avatarUrl?: string;
   adminScopes?: string[];
   [key: string]: any;
 };
@@ -127,4 +132,77 @@ export type ConfigureAutojoinRequest = {
   domains: string[];
   widgetId: string;
   metadata?: Record<string, any>;
+};
+
+/**
+ * Target types for creating invitations
+ */
+export type CreateInvitationTargetType = 'email' | 'phone' | 'internal';
+
+/**
+ * Target for creating an invitation
+ */
+export type CreateInvitationTarget = {
+  type: CreateInvitationTargetType;
+  value: string;
+};
+
+/**
+ * Information about the user creating the invitation (the inviter)
+ */
+export type Inviter = {
+  /** The internal user ID of the person creating the invitation (from your system) */
+  userId: string;
+  /** The email address of the person creating the invitation */
+  userEmail?: string;
+  /** The display name of the person creating the invitation */
+  name?: string;
+  /** Avatar URL for the person creating the invitation */
+  avatarUrl?: string;
+};
+
+/**
+ * Group information for creating invitations
+ */
+export type CreateInvitationGroup = {
+  /** The type of the group/scope (e.g., "team", "organization", "project") */
+  type: string;
+  /** The ID of the group/scope in your system */
+  groupId: string;
+  /** The display name of the group/scope */
+  name: string;
+};
+
+/**
+ * Request body for creating an invitation via the public API
+ */
+export type CreateInvitationRequest = {
+  /** The ID of the widget configuration to use for this invitation */
+  widgetConfigurationId: string;
+  /** The target of the invitation (who is being invited) */
+  target: CreateInvitationTarget;
+  /** Information about the user creating the invitation */
+  inviter: Inviter;
+  /** Groups/scopes to associate with this invitation */
+  groups?: CreateInvitationGroup[];
+  /** The source of the invitation for analytics (e.g., "api", "backend", "pymk") */
+  source?: string;
+  /** Template variables for email customization */
+  templateVariables?: Record<string, string>;
+  /** Custom metadata to attach to the invitation (passed through to webhooks) */
+  metadata?: Record<string, any>;
+};
+
+/**
+ * Response from creating an invitation
+ */
+export type CreateInvitationResponse = {
+  /** The ID of the created invitation */
+  id: string;
+  /** The short link for the invitation */
+  shortLink: string;
+  /** The status of the invitation */
+  status: string;
+  /** When the invitation was created */
+  createdAt: string;
 };

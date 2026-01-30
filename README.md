@@ -60,8 +60,8 @@ app.get('/vortex-jwt', (req, res) => {
     user: {
       id: 'user-123',
       email: 'user@example.com',
-      name: 'Jane Doe',                                      // Optional: user's display name
-      avatarUrl: 'https://example.com/avatars/jane.jpg',    // Optional: user's avatar URL
+      userName: 'Jane Doe',                                      // Optional: user's display name
+      userAvatarUrl: 'https://example.com/avatars/jane.jpg',    // Optional: user's avatar URL
       adminScopes: ['autojoin'],                             // Optional: grants admin privileges for autojoining
     },
   });
@@ -83,8 +83,8 @@ const token = vortex.generateJwt({
   user: {
     id: 'user-123',
     email: 'user@example.com',
-    name: 'Jane Doe',                                    // Optional
-    avatarUrl: 'https://example.com/avatars/jane.jpg',  // Optional
+    userName: 'Jane Doe',                                    // Optional
+    userAvatarUrl: 'https://example.com/avatars/jane.jpg',  // Optional
   },
 });
 ```

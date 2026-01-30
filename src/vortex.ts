@@ -68,14 +68,14 @@ export class Vortex {
       identifiers: user.email ? [{ type: 'email', value: user.email }] : [],
     };
 
-    // Add name if present
-    if (user.name) {
-      payload.name = user.name;
+    // Add userName if present
+    if (user.userName) {
+      payload.userName = user.userName;
     }
 
-    // Add avatarUrl if present
-    if (user.avatarUrl) {
-      payload.avatarUrl = user.avatarUrl;
+    // Add userAvatarUrl if present
+    if (user.userAvatarUrl) {
+      payload.userAvatarUrl = user.userAvatarUrl;
     }
 
     // Add adminScopes if present

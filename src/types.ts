@@ -100,8 +100,8 @@ export type ApiRequestBody = AcceptInvitationRequest | AcceptInvitationRequestLe
 export type User = {
   id: string;
   email: string;
-  name?: string;
-  avatarUrl?: string;
+  userName?: string;
+  userAvatarUrl?: string;
   adminScopes?: string[];
   [key: string]: any;
 };
@@ -156,9 +156,9 @@ export type Inviter = {
   /** The email address of the person creating the invitation */
   userEmail?: string;
   /** The display name of the person creating the invitation */
-  name?: string;
+  userName?: string;
   /** Avatar URL for the person creating the invitation */
-  avatarUrl?: string;
+  userAvatarUrl?: string;
 };
 
 /**

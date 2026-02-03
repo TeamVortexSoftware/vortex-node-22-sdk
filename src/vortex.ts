@@ -254,17 +254,16 @@ export class Vortex {
         '[Vortex SDK] DEPRECATED: Passing a target object is deprecated. Use the User format instead: acceptInvitations(invitationIds, { email: "user@example.com" })'
       );
 
-      // Convert legacy target to User format
+      // Convert target to User format
       const target = userOrTarget as InvitationTarget;
       const user: AcceptUser = {};
 
       if (target.type === 'email') {
         user.email = target.value;
-      } else if (target.type === 'phone' || target.type === 'phoneNumber') {
+      } else if (target.type === 'phone') {
         user.phone = target.value;
       } else {
-        // For other types (like 'username'), try to use as email
-        user.email = target.value;
+        throw new Error(`Unsupported target type for accept: ${target.type}`);
       }
 
       // Make request with User format
@@ -394,16 +393,24 @@ export class Vortex {
    * @param params.source - Optional source for analytics (defaults to 'api')
    * @param params.templateVariables - Optional template variables for email customization
    * @param params.metadata - Optional metadata passed through to webhooks
+   * @param params.unfurlConfig - Optional link unfurl (Open Graph) configuration
    * @returns Created invitation with ID, short link, status, and creation timestamp
    *
    * @example
    * ```typescript
-   * // Create an email invitation
+   * // Create an email invitation with custom link preview
    * const invitation = await vortex.createInvitation({
    *   widgetConfigurationId: 'widget-config-123',
    *   target: { type: 'email', value: 'invitee@example.com' },
    *   inviter: { userId: 'user-456', userEmail: 'inviter@example.com', name: 'John Doe' },
    *   groups: [{ type: 'team', groupId: 'team-789', name: 'Engineering' }],
+   *   unfurlConfig: {
+   *     title: 'Join the Engineering team!',
+   *     description: 'John Doe invited you to collaborate on Engineering',
+   *     image: 'https://example.com/og-image.png',
+   *     type: 'website',
+   *     siteName: 'Acme App',
+   *   },
    * });
    *
    * // Create an internal invitation (PYMK flow - no email sent)

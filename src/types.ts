@@ -1,5 +1,5 @@
 export type InvitationTarget = {
-  type: 'email' | 'phone';
+  type: 'email' | 'phone' | 'share' | 'internal';
   value: string;
 };
 
@@ -46,11 +46,12 @@ export type InvitationResult = {
   deliveryCount: number;
   deliveryTypes: ('email' | 'phone' | 'share' | 'internal')[];
   foreignCreatorId: string;
-  invitationType: 'single_use' | 'multi_use';
+  invitationType: 'single_use' | 'multi_use' | 'autojoin';
   modifiedAt: string | null;
   status:
     | 'queued'
     | 'sending'
+    | 'sent'
     | 'delivered'
     | 'accepted'
     | 'shared'
@@ -174,6 +175,23 @@ export type CreateInvitationGroup = {
 };
 
 /**
+ * Configuration for link unfurl (Open Graph) metadata
+ * Controls how the invitation link appears when shared on social platforms or messaging apps
+ */
+export type UnfurlConfig = {
+  /** The title shown in link previews (og:title) */
+  title?: string;
+  /** The description shown in link previews (og:description) */
+  description?: string;
+  /** The image URL shown in link previews (og:image) - must be HTTPS */
+  image?: string;
+  /** The Open Graph type (og:type) - e.g., 'website', 'article', 'product' */
+  type?: 'website' | 'article' | 'video' | 'music' | 'book' | 'profile' | 'product';
+  /** The site name shown in link previews (og:site_name) */
+  siteName?: string;
+};
+
+/**
  * Request body for creating an invitation via the public API
  */
 export type CreateInvitationRequest = {
@@ -191,6 +209,8 @@ export type CreateInvitationRequest = {
   templateVariables?: Record<string, string>;
   /** Custom metadata to attach to the invitation (passed through to webhooks) */
   metadata?: Record<string, any>;
+  /** Link unfurl (Open Graph) configuration for social/messaging previews */
+  unfurlConfig?: UnfurlConfig;
 };
 
 /**

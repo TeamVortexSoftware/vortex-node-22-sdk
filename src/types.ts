@@ -1,6 +1,10 @@
 export type InvitationTarget = {
   type: 'email' | 'phone' | 'share' | 'internal';
   value: string;
+  /** The display name of the person being invited */
+  name?: string | null;
+  /** Avatar URL for the person being invited (for display in invitation lists) */
+  avatarUrl?: string | null;
 };
 
 /**
@@ -66,6 +70,8 @@ export type InvitationResult = {
   expired: boolean;
   expires?: string;
   source?: string;
+  /** Customer-defined subtype for categorizing this invitation (e.g., pymk, find-friends, profile-button) */
+  subtype?: string | null;
   creatorName?: string | null;
   creatorAvatarUrl?: string | null;
 };
@@ -146,6 +152,10 @@ export type CreateInvitationTargetType = 'email' | 'phone' | 'internal';
 export type CreateInvitationTarget = {
   type: CreateInvitationTargetType;
   value: string;
+  /** The display name of the person being invited */
+  name?: string;
+  /** Avatar URL for the person being invited (for display in invitation lists) */
+  avatarUrl?: string;
 };
 
 /**
@@ -209,6 +219,12 @@ export type CreateInvitationRequest = {
   templateVariables?: Record<string, string>;
   /** Custom metadata to attach to the invitation (passed through to webhooks) */
   metadata?: Record<string, any>;
+  /**
+   * Customer-defined subtype for categorizing this invitation.
+   * Used for analytics segmentation, especially for internal invitations.
+   * Examples: "pymk", "find-friends", "profile-button", "post-signup"
+   */
+  subtype?: string;
   /** Link unfurl (Open Graph) configuration for social/messaging previews */
   unfurlConfig?: UnfurlConfig;
 };

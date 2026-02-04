@@ -391,6 +391,7 @@ export class Vortex {
    * @param params.inviter.name - Optional display name of the inviter
    * @param params.groups - Optional groups/scopes to associate with the invitation
    * @param params.source - Optional source for analytics (defaults to 'api')
+   * @param params.subtype - Optional subtype for analytics segmentation (e.g., 'pymk', 'find-friends')
    * @param params.templateVariables - Optional template variables for email customization
    * @param params.metadata - Optional metadata passed through to webhooks
    * @param params.unfurlConfig - Optional link unfurl (Open Graph) configuration
@@ -414,11 +415,13 @@ export class Vortex {
    * });
    *
    * // Create an internal invitation (PYMK flow - no email sent)
+   * // Use subtype for analytics segmentation
    * const pymkInvitation = await vortex.createInvitation({
    *   widgetConfigurationId: 'widget-config-123',
    *   target: { type: 'internal', value: 'internal-user-id-abc' },
    *   inviter: { userId: 'user-456' },
-   *   source: 'pymk',
+   *   source: 'internal',
+   *   subtype: 'pymk', // Track this as a "People You May Know" invitation
    * });
    * ```
    */

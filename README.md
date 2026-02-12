@@ -284,41 +284,54 @@ app.get('/invitations/by-email', async (req, res) => {
 });
 ```
 
-### Accept invitations
+### Accept an invitation
 
-This is how you'd accept one or more invitations with the SDK. You want this as part of your signup flow more than likely. When someone clicks on an invitation link, we redirect to the landing page you specified in the widget configuration. Ultimately, the user will sign up with your service and that is when you create the relationship between the newly created user in your system and whatever grouping defined in the invitation itself.
-
-Illustrated in the example below, you will see how to accept one or more invitations. For the sake of the example, we'll assume you want to accept all open invitations when a user signs up to your service. The example will leverage the previous example's call to getInvitationsByTarget with the acceptInvitations call.
+This is how you'd accept an invitation with the SDK. You want this as part of your signup flow more than likely. When someone clicks on an invitation link, we redirect to the landing page you specified in the widget configuration. Ultimately, the user will sign up with your service and that is when you create the relationship between the newly created user in your system and whatever grouping is defined in the invitation itself.
 
 ```ts
 app.post('/signup', async (req, res) => {
   const email = req.body.email;
+  const invitationId = req.body.invitationId;
+
   if (!email) {
-    // gracefully handle this situation
     return res.status(400).send('Email is required');
   }
 
   // YOUR signup logic, whatever it may be
   await myApp.doSignupLogic(email);
 
-  // you may want to do this even if the user is signing up without clicking an invitaiton link
-  const invitations = await vortex.getInvitationsByTarget('email', email);
-
-  // Assume that your application may pass the original invitationId from the
-  // landing page registered with the configured widget
-  const invitationId = req.body.invitationId;
-
-  const uniqueInvitationIds = invitations.map((invitation) => invitation.id);
-  if (invitationId && uniqueInvitationIds.indexOf(invitationId) === -1) {
-    uniqueInvitationIds.push(invitationId);
+  // Accept the invitation if one was provided
+  if (invitationId) {
+    await vortex.acceptInvitation(invitationId, { email });
   }
 
-  const acceptedInvitations = await vortex.acceptInvitations(uniqueInvitationIds, {
-    type: 'email',
-    value: email,
-  });
+  // continue with post-signup activity
+  res.redirect(302, '/app');
+});
+```
 
-  // continue with post-signup activity. perhaps redirect to your logged in landing page
+### Accept multiple invitations
+
+If you need to accept multiple invitations at once (e.g., accepting all pending invitations for a user), use `acceptInvitations`:
+
+```ts
+app.post('/signup', async (req, res) => {
+  const email = req.body.email;
+  if (!email) {
+    return res.status(400).send('Email is required');
+  }
+
+  // YOUR signup logic, whatever it may be
+  await myApp.doSignupLogic(email);
+
+  // Fetch all pending invitations for this email
+  const invitations = await vortex.getInvitationsByTarget('email', email);
+
+  // Accept all of them at once
+  if (invitations.length > 0) {
+    const invitationIds = invitations.map((inv) => inv.id);
+    await vortex.acceptInvitations(invitationIds, { email });
+  }
 
   res.redirect(302, '/app');
 });

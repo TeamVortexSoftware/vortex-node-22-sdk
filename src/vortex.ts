@@ -88,6 +88,11 @@ export class Vortex {
       }
     }
 
+    // Add allowedEmailDomains if present (for domain-restricted invitations)
+    if (user.allowedEmailDomains && user.allowedEmailDomains.length > 0) {
+      payload.allowedEmailDomains = user.allowedEmailDomains;
+    }
+
     // Add any additional properties from rest
     if (rest && Object.keys(rest).length > 0) {
       Object.assign(payload, rest);
@@ -295,6 +300,21 @@ export class Vortex {
       path: `/api/v1/invitations/accept`,
     })) as InvitationResult;
     return response;
+  }
+
+  /**
+   * Accept a single invitation
+   * This is the recommended method for accepting invitations.
+   * @param invitationId - Single invitation ID to accept
+   * @param user - User object with email or phone (and optional name)
+   * @returns Invitation result
+   * @example
+   * ```typescript
+   * await vortex.acceptInvitation('inv-123', { email: 'user@example.com', name: 'John' });
+   * ```
+   */
+  async acceptInvitation(invitationId: string, user: AcceptUser): Promise<InvitationResult> {
+    return this.acceptInvitations([invitationId], user);
   }
 
   async deleteInvitationsByGroup(groupType: string, groupId: string): Promise<{}> {

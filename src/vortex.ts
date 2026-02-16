@@ -14,6 +14,12 @@ import {
   CreateInvitationResponse,
 } from './types';
 
+// SDK identification for request tracking
+// __SDK_VERSION__ is injected at build time by tsup (see tsup.config.ts)
+declare const __SDK_VERSION__: string;
+const SDK_NAME = 'vortex-node-sdk';
+const SDK_VERSION = typeof __SDK_VERSION__ !== 'undefined' ? __SDK_VERSION__ : '0.8.1';
+
 export class Vortex {
   constructor(private apiKey: string) {}
 
@@ -131,6 +137,8 @@ export class Vortex {
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': this.apiKey,
+        'x-vortex-sdk-name': SDK_NAME,
+        'x-vortex-sdk-version': SDK_VERSION,
       },
       body: body ? JSON.stringify(body) : undefined,
     });

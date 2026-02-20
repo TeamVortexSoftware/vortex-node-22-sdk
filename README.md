@@ -337,6 +337,53 @@ app.post('/signup', async (req, res) => {
 });
 ```
 
+### Sync Internal Invitation
+
+If you're using `internal` delivery type invitations and managing the invitation flow within your own application, you can sync invitation decisions back to Vortex when users accept or decline invitations in your system.
+
+This is useful when:
+- You handle invitation delivery through your own in-app notifications or UI
+- Users accept/decline invitations within your application
+- You need to keep Vortex updated with the invitation status
+
+```ts
+app.post('/invitations/sync-internal', async (req, res) => {
+  const { creatorId, targetValue, action, componentId } = req.body;
+  
+  if (!creatorId || !targetValue || !action || !componentId) {
+    return res.status(400).send('Required: creatorId, targetValue, action, componentId');
+  }
+
+  try {
+    // Sync the invitation decision back to Vortex
+    const result = await vortex.syncInternalInvitation({
+      creatorId,      // The inviter's user ID in your system
+      targetValue,    // The invitee's user ID in your system
+      action,         // "accepted" or "declined"
+      componentId     // The widget component UUID
+    });
+
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({
+      processed: result.processed,           // Number of invitations processed
+      invitationIds: result.invitationIds    // Array of processed invitation IDs
+    }));
+  } catch (error) {
+    res.status(500).send('Failed to sync invitation');
+  }
+});
+```
+
+**Parameters:**
+- `creatorId` (string) — The inviter's user ID in your system
+- `targetValue` (string) — The invitee's user ID in your system
+- `action` ("accepted" | "declined") — The invitation decision
+- `componentId` (string) — The widget component UUID
+
+**Response:**
+- `processed` (number) — Count of invitations processed
+- `invitationIds` (string[]) — IDs of processed invitations
+
 ### Fetch invitations by group
 
 Perhaps you want to allow your users to see all outstanding invitations for a group that they are a member of. Or perhaps you want this exclusively for admins of the group. However you choose to do it, this SDK feature will allow you to fetch all outstanding invitations for a group.

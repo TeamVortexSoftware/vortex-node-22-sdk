@@ -96,6 +96,30 @@ export type AcceptInvitationRequestLegacy = {
   target: InvitationTarget;
 };
 
+/**
+ * Request body for syncing an internal invitation action
+ */
+export type SyncInternalInvitationRequest = {
+  /** The inviter's user ID */
+  creatorId: string;
+  /** The invitee's user ID */
+  targetValue: string;
+  /** The action taken: "accepted" or "declined" */
+  action: 'accepted' | 'declined';
+  /** The widget component UUID */
+  componentId: string;
+};
+
+/**
+ * Response from syncing an internal invitation action
+ */
+export type SyncInternalInvitationResponse = {
+  /** Number of invitations processed */
+  processed: number;
+  /** IDs of the invitations that were processed */
+  invitationIds: string[];
+};
+
 export type ApiResponseJson = InvitationResult | { invitations: InvitationResult[] } | {};
 
 export type ApiRequestBody = AcceptInvitationRequest | AcceptInvitationRequestLegacy | null;

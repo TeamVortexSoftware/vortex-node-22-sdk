@@ -12,13 +12,15 @@ import {
   InvitationTarget,
   CreateInvitationRequest,
   CreateInvitationResponse,
+  SyncInternalInvitationRequest,
+  SyncInternalInvitationResponse,
 } from './types';
 
 // SDK identification for request tracking
 // __SDK_VERSION__ is injected at build time by tsup (see tsup.config.ts)
 declare const __SDK_VERSION__: string;
 const SDK_NAME = 'vortex-node-sdk';
-const SDK_VERSION = typeof __SDK_VERSION__ !== 'undefined' ? __SDK_VERSION__ : '0.8.1';
+const SDK_VERSION = typeof __SDK_VERSION__ !== 'undefined' ? __SDK_VERSION__ : '0.8.2';
 
 export class Vortex {
   constructor(private apiKey: string) {}
@@ -459,5 +461,37 @@ export class Vortex {
       path: '/api/v1/invitations',
       body: params as unknown as ApiRequestBody,
     }) as Promise<CreateInvitationResponse>;
+  }
+
+  /**
+   * Sync an internal invitation action (accept or decline)
+   *
+   * This method notifies Vortex that an internal invitation was accepted or declined
+   * within your application, so Vortex can update the invitation status accordingly.
+   *
+   * @param params - Sync parameters
+   * @param params.creatorId - The inviter's user ID
+   * @param params.targetValue - The invitee's user ID
+   * @param params.action - The action taken: "accepted" or "declined"
+   * @param params.componentId - The widget component UUID
+   * @returns Object with processed count and invitation IDs
+   *
+   * @example
+   * ```typescript
+   * const result = await vortex.syncInternalInvitation({
+   *   creatorId: 'user-123',
+   *   targetValue: 'user-456',
+   *   action: 'accepted',
+   *   componentId: 'component-uuid-789',
+   * });
+   * console.log(`Processed ${result.processed} invitations`);
+   * ```
+   */
+  async syncInternalInvitation(params: SyncInternalInvitationRequest): Promise<SyncInternalInvitationResponse> {
+    return this.vortexApiRequest({
+      method: 'POST',
+      path: '/api/v1/invitation-actions/sync-internal-invitation',
+      body: params as unknown as ApiRequestBody,
+    }) as Promise<SyncInternalInvitationResponse>;
   }
 }

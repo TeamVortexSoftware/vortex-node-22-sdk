@@ -490,7 +490,7 @@ export class Vortex {
   async syncInternalInvitation(params: SyncInternalInvitationRequest): Promise<SyncInternalInvitationResponse> {
     return this.vortexApiRequest({
       method: 'POST',
-      path: '/api/v1/invitation-actions/sync-internal-invitation',
+      path: '/api/v1/invitations/sync-internal-invitation',
       body: params as unknown as ApiRequestBody,
     }) as Promise<SyncInternalInvitationResponse>;
   }

@@ -461,3 +461,308 @@ app.delete('/workspace/:workspaceId', async (req, res) => {
   res.end(JSON.stringify({}));
 });
 ```
+
+---
+
+## Webhooks
+
+Vortex can forward events to your server via webhooks. There are two categories of events:
+
+- **Webhook events** — Server-side state changes (invitation accepted, member created, A/B test winner declared, etc.)
+- **Analytics events** — Client-side behavioral telemetry (widget loaded, share triggered, etc.)
+
+You configure webhook destinations and subscribe to specific event types in the [Vortex dashboard](https://admin.vortexsoftware.com/members/integrations). Each destination has a **signing secret** used to verify that incoming requests are genuinely from Vortex.
+
+### Install
+
+The webhook utilities are included in the Node SDK. For framework-specific helpers, install the corresponding framework SDK as well:
+
+```sh
+# Core (required)
+npm install @teamvortexsoftware/vortex-node-22-sdk
+
+# Pick your framework (optional — you can also use the core directly)
+npm install @teamvortexsoftware/vortex-express-5-sdk    # Express 5
+npm install @teamvortexsoftware/vortex-nextjs-15-sdk     # Next.js 15 (App Router)
+npm install @teamvortexsoftware/vortex-fastify-5-sdk     # Fastify 5
+```
+
+### Setup
+
+```typescript
+import { VortexWebhooks } from '@teamvortexsoftware/vortex-node-22-sdk';
+
+// The signing secret comes from your webhook destination in the Vortex dashboard
+const webhooks = new VortexWebhooks({
+  secret: process.env.VORTEX_WEBHOOK_SECRET!,
+});
+```
+
+### Quick start with Express
+
+The fastest way to get webhooks working. You define the route, we handle verification and routing:
+
+```typescript
+import express from 'express';
+import { VortexWebhooks, WebhookEventTypes } from '@teamvortexsoftware/vortex-node-22-sdk';
+import { createVortexWebhookHandler } from '@teamvortexsoftware/vortex-express-5-sdk';
+
+const app = express();
+const webhooks = new VortexWebhooks({ secret: process.env.VORTEX_WEBHOOK_SECRET! });
+
+// IMPORTANT: Use express.raw() so the handler gets the raw body for signature verification.
+// If you use express.json() globally, exclude this route or the signature check will fail.
+app.post('/webhooks/vortex',
+  express.raw({ type: 'application/json' }),
+  createVortexWebhookHandler(webhooks, {
+    // Handle specific event types
+    on: {
+      [WebhookEventTypes.INVITATION_ACCEPTED]: async (event) => {
+        // event.data contains the invitation details
+        const email = event.data.targetEmail as string;
+        console.log(`Invitation accepted by ${email}`);
+        await myApp.grantAccess(email, event.data.groups);
+      },
+
+      [WebhookEventTypes.INVITATION_EMAIL_BOUNCED]: async (event) => {
+        // Mark the email as invalid in your system
+        await myApp.flagInvalidEmail(event.data.targetEmail as string);
+      },
+
+      [WebhookEventTypes.MEMBER_CREATED]: async (event) => {
+        // A new member was created (typically after accepting an invitation)
+        await myApp.sendWelcomeNotification(event.data);
+      },
+
+      [WebhookEventTypes.ABTEST_WINNER_DECLARED]: async (event) => {
+        // An A/B test resolved — you might want to log this
+        console.log('A/B test winner:', event.data);
+      },
+    },
+
+    // Optionally handle ALL webhook events (runs after the specific handler above)
+    onEvent: async (event) => {
+      // Good place for logging, audit trails, or forwarding to your own event bus
+      console.log(`[vortex] ${event.type} (${event.id}) at ${event.timestamp}`);
+      await myEventBus.publish('vortex.webhook', event);
+    },
+
+    // Handle analytics events separately (these are client-side telemetry, not state changes)
+    onAnalyticsEvent: async (event) => {
+      // Forward to your analytics warehouse
+      await myWarehouse.ingest({
+        source: 'vortex',
+        event: event.name,
+        userId: event.foreignUserId,
+        properties: event.payload,
+        timestamp: event.timestamp,
+      });
+    },
+
+    // Optional error handler — if omitted, errors result in 401/500 responses
+    onError: (err) => {
+      console.error('Vortex webhook error:', err.message);
+      myErrorTracker.captureException(err);
+    },
+  })
+);
+
+app.listen(3000);
+```
+
+### Quick start with Next.js (App Router)
+
+Create a route handler file and export the POST handler:
+
+```typescript
+// app/api/webhooks/vortex/route.ts
+import { VortexWebhooks, WebhookEventTypes } from '@teamvortexsoftware/vortex-node-22-sdk';
+import { createVortexWebhookRouteHandler } from '@teamvortexsoftware/vortex-nextjs-15-sdk';
+
+const webhooks = new VortexWebhooks({ secret: process.env.VORTEX_WEBHOOK_SECRET! });
+
+export const POST = createVortexWebhookRouteHandler(webhooks, {
+  on: {
+    [WebhookEventTypes.INVITATION_ACCEPTED]: async (event) => {
+      const email = event.data.targetEmail as string;
+
+      // Grant access in your system
+      await db.user.update({
+        where: { email },
+        data: { status: 'active', invitedAt: event.timestamp },
+      });
+    },
+
+    [WebhookEventTypes.INVITATION_EMAIL_BOUNCED]: async (event) => {
+      // Clean up invalid invitations
+      await db.invitation.update({
+        where: { vortexId: event.data.invitationId as string },
+        data: { status: 'bounced' },
+      });
+    },
+  },
+
+  onEvent: async (event) => {
+    // Log all events for debugging
+    console.log(`[vortex webhook] ${event.type}`, event.id);
+  },
+});
+```
+
+**Note:** Next.js App Router route handlers automatically receive the raw request body, so no special body parser configuration is needed.
+
+### Quick start with Fastify
+
+```typescript
+import Fastify from 'fastify';
+import fastifyRawBody from 'fastify-raw-body';
+import { VortexWebhooks, WebhookEventTypes } from '@teamvortexsoftware/vortex-node-22-sdk';
+import { createVortexWebhookHandler } from '@teamvortexsoftware/vortex-fastify-5-sdk';
+
+const app = Fastify();
+
+// Register the raw body plugin so the handler can verify the signature
+await app.register(fastifyRawBody);
+
+const webhooks = new VortexWebhooks({ secret: process.env.VORTEX_WEBHOOK_SECRET! });
+
+app.post('/webhooks/vortex', createVortexWebhookHandler(webhooks, {
+  on: {
+    [WebhookEventTypes.INVITATION_ACCEPTED]: async (event) => {
+      await grantWorkspaceAccess(event.data);
+    },
+    [WebhookEventTypes.EMAIL_COMPLAINED]: async (event) => {
+      // Someone marked your invitation email as spam — suppress future sends
+      await suppressEmail(event.data.targetEmail as string);
+    },
+  },
+  onEvent: async (event) => {
+    app.log.info({ vortexEvent: event.type, eventId: event.id }, 'Vortex webhook received');
+  },
+}));
+
+await app.listen({ port: 3000 });
+```
+
+### Using the core directly (no framework helper)
+
+If you're using a framework we don't have a helper for, or you want full control, use `VortexWebhooks` directly. All you need is the raw request body and the signature header:
+
+```typescript
+import { VortexWebhooks, isWebhookEvent, isAnalyticsEvent } from '@teamvortexsoftware/vortex-node-22-sdk';
+
+const webhooks = new VortexWebhooks({ secret: process.env.VORTEX_WEBHOOK_SECRET! });
+
+// In whatever HTTP handler your framework gives you:
+async function handleVortexWebhook(rawBody: string | Buffer, headers: Record<string, string>) {
+  const signature = headers['x-vortex-signature'];
+
+  // constructEvent() verifies the signature and parses the JSON in one step.
+  // Throws VortexWebhookSignatureError if the signature is invalid.
+  const event = webhooks.constructEvent(rawBody, signature);
+
+  if (isWebhookEvent(event)) {
+    // This is a server-side state change (invitation accepted, member created, etc.)
+    console.log(`Webhook: ${event.type}`, event.data);
+
+    switch (event.type) {
+      case 'invitation.accepted':
+        await handleInvitationAccepted(event.data);
+        break;
+      case 'member.created':
+        await handleMemberCreated(event.data);
+        break;
+      // ... handle other event types
+    }
+  } else if (isAnalyticsEvent(event)) {
+    // This is client-side behavioral telemetry (widget loaded, share triggered, etc.)
+    console.log(`Analytics: ${event.name}`, event.payload);
+    await forwardToWarehouse(event);
+  }
+}
+```
+
+### Webhook event payload shape
+
+Every webhook event delivered to your endpoint follows this structure:
+
+```typescript
+{
+  id: string;              // Unique event ID — use for idempotency
+  type: string;            // Event type (e.g., 'invitation.accepted')
+  timestamp: string;       // ISO-8601 timestamp of when the event occurred
+  accountId: string;       // Your Vortex account ID
+  environmentId: string;   // The environment (nullable)
+  sourceTable: string;     // Internal: the DB table that triggered the event
+  operation: string;       // 'insert' | 'update' | 'delete'
+  data: object;            // Event-specific payload (invitation details, member info, etc.)
+}
+```
+
+### Analytics event payload shape
+
+```typescript
+{
+  id: string;                      // Unique event ID
+  name: string;                    // Event name (e.g., 'widget_loaded')
+  accountId: string;               // Your Vortex account ID
+  organizationId: string;
+  projectId: string;
+  environmentId: string;
+  deploymentId: string | null;     // Which deployment generated this event
+  widgetConfigurationId: string | null;
+  foreignUserId: string | null;    // The user in your system who triggered this
+  sessionId: string | null;        // Analytics session
+  payload: object | null;          // Event-specific data (variant, etc.)
+  platform: string | null;         // 'web', 'ios', 'android'
+  segmentation: string | null;     // A/B test segment label
+  timestamp: string;               // ISO-8601
+}
+```
+
+### Event types reference
+
+Use the `WebhookEventTypes` constants for type-safe event matching:
+
+```typescript
+import { WebhookEventTypes } from '@teamvortexsoftware/vortex-node-22-sdk';
+
+// WebhookEventTypes.INVITATION_ACCEPTED === 'invitation.accepted'
+```
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `INVITATION_CREATED` | `invitation.created` | A new invitation was created and sent |
+| `INVITATION_ACCEPTED` | `invitation.accepted` | An invitation was accepted by the recipient |
+| `INVITATION_DEACTIVATED` | `invitation.deactivated` | An invitation was deactivated/cancelled |
+| `INVITATION_EMAIL_DELIVERED` | `invitation.email.delivered` | Invitation email successfully delivered |
+| `INVITATION_EMAIL_BOUNCED` | `invitation.email.bounced` | Invitation email bounced (hard bounce) |
+| `INVITATION_EMAIL_OPENED` | `invitation.email.opened` | Invitation email was opened |
+| `INVITATION_LINK_CLICKED` | `invitation.link.clicked` | Invitation link was clicked |
+| `INVITATION_REMINDER_SENT` | `invitation.reminder.sent` | A reminder/nudge email was sent |
+| `DEPLOYMENT_CREATED` | `deployment.created` | A new deployment was created/activated |
+| `DEPLOYMENT_DEACTIVATED` | `deployment.deactivated` | A deployment was deactivated |
+| `ABTEST_STARTED` | `abtest.started` | An A/B test experiment was started |
+| `ABTEST_WINNER_DECLARED` | `abtest.winner_declared` | An A/B test winner was declared |
+| `MEMBER_CREATED` | `member.created` | A new member was created (via invitation accept) |
+| `GROUP_MEMBER_ADDED` | `group.member.added` | A member was added to a group |
+| `EMAIL_COMPLAINED` | `email.complained` | A spam complaint was received |
+
+### Signature verification details
+
+Vortex signs every webhook payload with HMAC-SHA256 using your destination's signing secret. The hex-encoded signature is sent in the `X-Vortex-Signature` header.
+
+The SDK verifies signatures using timing-safe comparison to prevent timing attacks.
+
+**Important:** `constructEvent()` requires the **raw request body** (string or Buffer), not a parsed JSON object. If you pass `JSON.stringify(parsedBody)`, the signature check may fail because JSON serialization is not guaranteed to produce identical output. Make sure your body parser preserves the raw bytes:
+
+- **Express:** Use `express.raw({ type: 'application/json' })` on the webhook route
+- **Fastify:** Use the `fastify-raw-body` plugin
+- **Next.js:** App Router route handlers receive raw text via `request.text()` automatically
+
+### Best practices
+
+1. **Return 200 quickly.** Process events asynchronously (e.g., queue them) if your handler logic is slow. Vortex may retry if your endpoint takes too long.
+2. **Use the event `id` for idempotency.** Webhook deliveries can be retried, so your handler should be idempotent — store the event ID and skip duplicates.
+3. **Subscribe only to events you need.** In the Vortex dashboard, select only the event types your application cares about to reduce noise.
+4. **Keep your signing secret safe.** Treat it like an API key. Rotate it in the dashboard if compromised.

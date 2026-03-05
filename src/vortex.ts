@@ -4,6 +4,7 @@ import {
   ApiRequestBody,
   ApiResponseJson,
   InvitationResult,
+  InvitationResultBase,
   AcceptInvitationRequest,
   User,
   AcceptUser,
@@ -178,7 +179,7 @@ export class Vortex {
   async getInvitationsByTarget(
     targetType: 'email' | 'username' | 'phoneNumber',
     targetValue: string
-  ): Promise<InvitationResult[]> {
+  ): Promise<InvitationResultBase[]> {
     const response = (await this.vortexApiRequest({
       method: 'GET',
       path: '/api/v1/invitations',
@@ -186,7 +187,7 @@ export class Vortex {
         targetType,
         targetValue,
       },
-    })) as { invitations: InvitationResult[] };
+    })) as { invitations: InvitationResultBase[] };
     return response.invitations;
   }
 

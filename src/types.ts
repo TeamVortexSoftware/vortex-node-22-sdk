@@ -39,7 +39,11 @@ export type InvitationAcceptance = {
   target: InvitationTarget;
 };
 
-export type InvitationResult = {
+/**
+ * Base invitation result without target information.
+ * Used by endpoints like getInvitationsByTarget where target is already known.
+ */
+export type InvitationResultBase = {
   id: string;
   accountId: string;
   clickThroughs: number;
@@ -61,7 +65,6 @@ export type InvitationResult = {
     | 'shared'
     | 'unfurled'
     | 'accepted_elsewhere';
-  target: InvitationTarget[];
   views: number;
   widgetConfigurationId: string;
   projectId: string;
@@ -74,6 +77,14 @@ export type InvitationResult = {
   subtype?: string | null;
   creatorName?: string | null;
   creatorAvatarUrl?: string | null;
+};
+
+/**
+ * Full invitation result including target information.
+ * Used by getInvitation, getInvitationsByGroup, and other endpoints that return targets.
+ */
+export type InvitationResult = InvitationResultBase & {
+  target: InvitationTarget[];
 };
 
 /**
@@ -120,7 +131,12 @@ export type SyncInternalInvitationResponse = {
   invitationIds: string[];
 };
 
-export type ApiResponseJson = InvitationResult | { invitations: InvitationResult[] } | {};
+export type ApiResponseJson =
+  | InvitationResult
+  | InvitationResultBase
+  | { invitations: InvitationResult[] }
+  | { invitations: InvitationResultBase[] }
+  | {};
 
 export type ApiRequestBody = AcceptInvitationRequest | AcceptInvitationRequestLegacy | null;
 

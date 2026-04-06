@@ -37,6 +37,34 @@ Your API key is used to
 - Sign JWTs for use with the Vortex Widget
 - Make API calls against the [Vortex API](https://api.vortexsoftware.com/api)
 
+### Sign user data for use with the Vortex Widget (Alternative to JWT)
+
+Instead of generating a full JWT, you can use the simpler `sign()` method. This produces an HMAC signature that you pass alongside the `user` prop on your Vortex widget. The widget handles the rest.
+
+```ts
+const vortex = new Vortex(process.env.VORTEX_API_KEY);
+
+// Sign the user data — that's it
+const signature = vortex.sign({
+  id: 'user-123',
+  email: 'user@example.com',
+  name: 'Jane Doe', // Optional
+});
+
+// Pass both user and signature to your frontend
+// Frontend usage:
+// <VortexInvite
+//   user={{ userId: 'user-123', userEmail: 'user@example.com', name: 'Jane Doe' }}
+//   signature={signature}
+// />
+```
+
+**Why use `sign()` instead of `generateJwt()`?**
+
+- Simpler: one method call, no JWT structure to understand
+- The `user` prop works in development without a signature, so you can add `signature` when you're ready for production — no code rewrite needed
+- Uses HMAC-SHA256 with your API key's signing key. Unlike JWTs, signed-data tokens have no built-in expiry — signatures remain valid until the API key is rotated. Use `generateJwt()` if you need short-lived, non-replayable tokens with explicit expiry
+
 ### Generate a JWT for use with the Vortex Widget
 
 Let's assume you have an express powered API and a user that is looking to invite others and you have a Vortex widget embedded on a component in your frontend codebase. Your frontend will need to provide a JWT to the Vortex widget which allows Vortex to validate the user making the request.
@@ -60,9 +88,9 @@ app.get('/vortex-jwt', (req, res) => {
     user: {
       id: 'user-123',
       email: 'user@example.com',
-      userName: 'Jane Doe',                                      // Optional: user's display name
-      userAvatarUrl: 'https://example.com/avatars/jane.jpg',    // Optional: user's avatar URL
-      adminScopes: ['autojoin'],                             // Optional: grants admin privileges for autojoining
+      name: 'Jane Doe', // Optional: user's display name
+      avatarUrl: 'https://example.com/avatars/jane.jpg', // Optional: user's avatar URL
+      adminScopes: ['autojoin'], // Optional: grants admin privileges for autojoining
     },
   });
 
@@ -83,18 +111,20 @@ const token = vortex.generateJwt({
   user: {
     id: 'user-123',
     email: 'user@example.com',
-    userName: 'Jane Doe',                                    // Optional
-    userAvatarUrl: 'https://example.com/avatars/jane.jpg',  // Optional
+    name: 'Jane Doe', // Optional
+    avatarUrl: 'https://example.com/avatars/jane.jpg', // Optional
   },
 });
 ```
 
 **Requirements:**
+
 - `name`: Optional string (max 200 characters)
 - `avatarUrl`: Optional HTTPS URL (max 2000 characters)
 - Both fields are optional and can be omitted
 
 **Validation:**
+
 - Invalid or non-HTTPS avatar URLs will be ignored with a warning
 - Authentication will succeed even with invalid avatar URLs
 
@@ -131,7 +161,7 @@ const identifiers = [
   { type: 'phone', value: '18008675309' },
 ];
 
-// groups are specific to your product. This list should be the groups that the current requesting user is a part of. It is up to you to define them if you so choose. Based on the values here, we can determine whether or not the user is allowed to invite others to a particular group
+// scopes (called "groups" in the legacy format) define where users can invite others. This list should contain the scopes the requesting user belongs to. Based on these values, we determine whether the user is allowed to invite to a particular scope.
 const groups = [
   {
     type: 'workspace',
@@ -219,8 +249,9 @@ function InviteWrapperComponent() {
   return (<VortexInvite
     widgetId={widgetId}
     jwt={jwt}
-    group={{ type: "workspace", groupId: "some-workspace-id", name: "The greatest workspace...pause...in the world" }}
-    templateVariables={{
+    scope="some-workspace-id"
+    scopeType="workspace"
+    templateVariables={{ // Note: template variable names use the original "group" naming
       group_name: "The greatest workspace...pause...in the world",
       inviter_name: "James Lahey",
       group_member_count: "23",
@@ -286,7 +317,7 @@ app.get('/invitations/by-email', async (req, res) => {
 
 ### Accept an invitation
 
-This is how you'd accept an invitation with the SDK. You want this as part of your signup flow more than likely. When someone clicks on an invitation link, we redirect to the landing page you specified in the widget configuration. Ultimately, the user will sign up with your service and that is when you create the relationship between the newly created user in your system and whatever grouping is defined in the invitation itself.
+This is how you'd accept an invitation with the SDK. You want this as part of your signup flow more than likely. When someone clicks on an invitation link, we redirect to the landing page you specified in the widget configuration. Ultimately, the user will sign up with your service and that is when you create the relationship between the newly created user in your system and whatever scope is defined in the invitation itself.
 
 ```ts
 app.post('/signup', async (req, res) => {
@@ -342,6 +373,7 @@ app.post('/signup', async (req, res) => {
 If you're using `internal` delivery type invitations and managing the invitation flow within your own application, you can sync invitation decisions back to Vortex when users accept or decline invitations in your system.
 
 This is useful when:
+
 - You handle invitation delivery through your own in-app notifications or UI
 - Users accept/decline invitations within your application
 - You need to keep Vortex updated with the invitation status
@@ -349,7 +381,7 @@ This is useful when:
 ```ts
 app.post('/invitations/sync-internal', async (req, res) => {
   const { creatorId, targetValue, action, componentId } = req.body;
-  
+
   if (!creatorId || !targetValue || !action || !componentId) {
     return res.status(400).send('Required: creatorId, targetValue, action, componentId');
   }
@@ -357,17 +389,19 @@ app.post('/invitations/sync-internal', async (req, res) => {
   try {
     // Sync the invitation decision back to Vortex
     const result = await vortex.syncInternalInvitation({
-      creatorId,      // The inviter's user ID in your system
-      targetValue,    // The invitee's user ID in your system
-      action,         // "accepted" or "declined"
-      componentId     // The widget component UUID
+      creatorId, // The inviter's user ID in your system
+      targetValue, // The invitee's user ID in your system
+      action, // "accepted" or "declined"
+      componentId, // The widget component UUID
     });
 
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({
-      processed: result.processed,           // Number of invitations processed
-      invitationIds: result.invitationIds    // Array of processed invitation IDs
-    }));
+    res.end(
+      JSON.stringify({
+        processed: result.processed, // Number of invitations processed
+        invitationIds: result.invitationIds, // Array of processed invitation IDs
+      })
+    );
   } catch (error) {
     res.status(500).send('Failed to sync invitation');
   }
@@ -375,28 +409,30 @@ app.post('/invitations/sync-internal', async (req, res) => {
 ```
 
 **Parameters:**
+
 - `creatorId` (string) — The inviter's user ID in your system
 - `targetValue` (string) — The invitee's user ID in your system
 - `action` ("accepted" | "declined") — The invitation decision
 - `componentId` (string) — The widget component UUID
 
 **Response:**
+
 - `processed` (number) — Count of invitations processed
 - `invitationIds` (string[]) — IDs of processed invitations
 
-### Fetch invitations by group
+### Fetch invitations by scope
 
-Perhaps you want to allow your users to see all outstanding invitations for a group that they are a member of. Or perhaps you want this exclusively for admins of the group. However you choose to do it, this SDK feature will allow you to fetch all outstanding invitations for a group.
+Perhaps you want to allow your users to see all outstanding invitations for a scope that they are a member of. Or perhaps you want this exclusively for admins of the scope. However you choose to do it, this SDK feature will allow you to fetch all outstanding invitations for a scope.
 
 ```ts
-app.get('/invitations/by-group', async (req, res) => {
-  const { groupType, groupId } = req.query;
-  if (!groupType || !groupId) {
+app.get('/invitations/by-scope', async (req, res) => {
+  const { scopeType, scope } = req.query;
+  if (!scopeType || !scope) {
     // gracefully handle this situation
-    return res.status(400).send('Required: groupType and groupId');
+    return res.status(400).send('Required: scopeType and scope');
   }
 
-  const invitations = await vortex.getInvitationsByGroup(groupType, groupId);
+  const invitations = await vortex.getInvitationsByScope(scopeType, scope);
 
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify(invitations));
@@ -441,7 +477,7 @@ app.post('/invitations/revoke', async (req, res) => {
 });
 ```
 
-### Delete invitations by group
+### Delete invitations by scope
 
 Your product may allow for your users to delete the underlying resource that is tied to one or more invitations. For instance, say your product has the concept of a 'workspace' and your invitations are created specifying a particular workspace associated with each invitation. Then, at some point in the future, the admin of the workspace decides to delete it. This means all invitations associated with that workspace are now invalid and need to be removed so that reminders don't go out for any outstanding invite to the now deleted workspace.
 
@@ -455,7 +491,7 @@ app.delete('/workspace/:workspaceId', async (req, res) => {
     return res.status(400).send('Required: workspaceId');
   }
 
-  await vortex.deleteInvitationsByGroup('workspace', workspaceId);
+  await vortex.deleteInvitationsByScope('workspace', workspaceId);
 
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify({}));
@@ -512,7 +548,8 @@ const webhooks = new VortexWebhooks({ secret: process.env.VORTEX_WEBHOOK_SECRET!
 
 // IMPORTANT: Use express.raw() so the handler gets the raw body for signature verification.
 // If you use express.json() globally, exclude this route or the signature check will fail.
-app.post('/webhooks/vortex',
+app.post(
+  '/webhooks/vortex',
   express.raw({ type: 'application/json' }),
   createVortexWebhookHandler(webhooks, {
     // Handle specific event types
@@ -626,20 +663,23 @@ await app.register(fastifyRawBody);
 
 const webhooks = new VortexWebhooks({ secret: process.env.VORTEX_WEBHOOK_SECRET! });
 
-app.post('/webhooks/vortex', createVortexWebhookHandler(webhooks, {
-  on: {
-    [WebhookEventTypes.INVITATION_ACCEPTED]: async (event) => {
-      await grantWorkspaceAccess(event.data);
+app.post(
+  '/webhooks/vortex',
+  createVortexWebhookHandler(webhooks, {
+    on: {
+      [WebhookEventTypes.INVITATION_ACCEPTED]: async (event) => {
+        await grantWorkspaceAccess(event.data);
+      },
+      [WebhookEventTypes.EMAIL_COMPLAINED]: async (event) => {
+        // Someone marked your invitation email as spam — suppress future sends
+        await suppressEmail(event.data.targetEmail as string);
+      },
     },
-    [WebhookEventTypes.EMAIL_COMPLAINED]: async (event) => {
-      // Someone marked your invitation email as spam — suppress future sends
-      await suppressEmail(event.data.targetEmail as string);
+    onEvent: async (event) => {
+      app.log.info({ vortexEvent: event.type, eventId: event.id }, 'Vortex webhook received');
     },
-  },
-  onEvent: async (event) => {
-    app.log.info({ vortexEvent: event.type, eventId: event.id }, 'Vortex webhook received');
-  },
-}));
+  })
+);
 
 await app.listen({ port: 3000 });
 ```
@@ -649,7 +689,11 @@ await app.listen({ port: 3000 });
 If you're using a framework we don't have a helper for, or you want full control, use `VortexWebhooks` directly. All you need is the raw request body and the signature header:
 
 ```typescript
-import { VortexWebhooks, isWebhookEvent, isAnalyticsEvent } from '@teamvortexsoftware/vortex-node-22-sdk';
+import {
+  VortexWebhooks,
+  isWebhookEvent,
+  isAnalyticsEvent,
+} from '@teamvortexsoftware/vortex-node-22-sdk';
 
 const webhooks = new VortexWebhooks({ secret: process.env.VORTEX_WEBHOOK_SECRET! });
 
@@ -688,14 +732,14 @@ Every webhook event delivered to your endpoint follows this structure:
 
 ```typescript
 {
-  id: string;              // Unique event ID — use for idempotency
-  type: string;            // Event type (e.g., 'invitation.accepted')
-  timestamp: string;       // ISO-8601 timestamp of when the event occurred
-  accountId: string;       // Your Vortex account ID
-  environmentId: string;   // The environment (nullable)
-  sourceTable: string;     // Internal: the DB table that triggered the event
-  operation: string;       // 'insert' | 'update' | 'delete'
-  data: object;            // Event-specific payload (invitation details, member info, etc.)
+  id: string; // Unique event ID — use for idempotency
+  type: string; // Event type (e.g., 'invitation.accepted')
+  timestamp: string; // ISO-8601 timestamp of when the event occurred
+  accountId: string; // Your Vortex account ID
+  environmentId: string; // The environment (nullable)
+  sourceTable: string; // Internal: the DB table that triggered the event
+  operation: string; // 'insert' | 'update' | 'delete'
+  data: object; // Event-specific payload (invitation details, member info, etc.)
 }
 ```
 
@@ -703,20 +747,20 @@ Every webhook event delivered to your endpoint follows this structure:
 
 ```typescript
 {
-  id: string;                      // Unique event ID
-  name: string;                    // Event name (e.g., 'widget_loaded')
-  accountId: string;               // Your Vortex account ID
+  id: string; // Unique event ID
+  name: string; // Event name (e.g., 'widget_loaded')
+  accountId: string; // Your Vortex account ID
   organizationId: string;
   projectId: string;
   environmentId: string;
-  deploymentId: string | null;     // Which deployment generated this event
+  deploymentId: string | null; // Which deployment generated this event
   widgetConfigurationId: string | null;
-  foreignUserId: string | null;    // The user in your system who triggered this
-  sessionId: string | null;        // Analytics session
-  payload: object | null;          // Event-specific data (variant, etc.)
-  platform: string | null;         // 'web', 'ios', 'android'
-  segmentation: string | null;     // A/B test segment label
-  timestamp: string;               // ISO-8601
+  foreignUserId: string | null; // The user in your system who triggered this
+  sessionId: string | null; // Analytics session
+  payload: object | null; // Event-specific data (variant, etc.)
+  platform: string | null; // 'web', 'ios', 'android'
+  segmentation: string | null; // A/B test segment label
+  timestamp: string; // ISO-8601
 }
 ```
 
@@ -730,23 +774,23 @@ import { WebhookEventTypes } from '@teamvortexsoftware/vortex-node-22-sdk';
 // WebhookEventTypes.INVITATION_ACCEPTED === 'invitation.accepted'
 ```
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `INVITATION_CREATED` | `invitation.created` | A new invitation was created and sent |
-| `INVITATION_ACCEPTED` | `invitation.accepted` | An invitation was accepted by the recipient |
-| `INVITATION_DEACTIVATED` | `invitation.deactivated` | An invitation was deactivated/cancelled |
-| `INVITATION_EMAIL_DELIVERED` | `invitation.email.delivered` | Invitation email successfully delivered |
-| `INVITATION_EMAIL_BOUNCED` | `invitation.email.bounced` | Invitation email bounced (hard bounce) |
-| `INVITATION_EMAIL_OPENED` | `invitation.email.opened` | Invitation email was opened |
-| `INVITATION_LINK_CLICKED` | `invitation.link.clicked` | Invitation link was clicked |
-| `INVITATION_REMINDER_SENT` | `invitation.reminder.sent` | A reminder/nudge email was sent |
-| `DEPLOYMENT_CREATED` | `deployment.created` | A new deployment was created/activated |
-| `DEPLOYMENT_DEACTIVATED` | `deployment.deactivated` | A deployment was deactivated |
-| `ABTEST_STARTED` | `abtest.started` | An A/B test experiment was started |
-| `ABTEST_WINNER_DECLARED` | `abtest.winner_declared` | An A/B test winner was declared |
-| `MEMBER_CREATED` | `member.created` | A new member was created (via invitation accept) |
-| `GROUP_MEMBER_ADDED` | `group.member.added` | A member was added to a group |
-| `EMAIL_COMPLAINED` | `email.complained` | A spam complaint was received |
+| Constant                     | Value                        | Description                                      |
+| ---------------------------- | ---------------------------- | ------------------------------------------------ |
+| `INVITATION_CREATED`         | `invitation.created`         | A new invitation was created and sent            |
+| `INVITATION_ACCEPTED`        | `invitation.accepted`        | An invitation was accepted by the recipient      |
+| `INVITATION_DEACTIVATED`     | `invitation.deactivated`     | An invitation was deactivated/cancelled          |
+| `INVITATION_EMAIL_DELIVERED` | `invitation.email.delivered` | Invitation email successfully delivered          |
+| `INVITATION_EMAIL_BOUNCED`   | `invitation.email.bounced`   | Invitation email bounced (hard bounce)           |
+| `INVITATION_EMAIL_OPENED`    | `invitation.email.opened`    | Invitation email was opened                      |
+| `INVITATION_LINK_CLICKED`    | `invitation.link.clicked`    | Invitation link was clicked                      |
+| `INVITATION_REMINDER_SENT`   | `invitation.reminder.sent`   | A reminder/nudge email was sent                  |
+| `DEPLOYMENT_CREATED`         | `deployment.created`         | A new deployment was created/activated           |
+| `DEPLOYMENT_DEACTIVATED`     | `deployment.deactivated`     | A deployment was deactivated                     |
+| `ABTEST_STARTED`             | `abtest.started`             | An A/B test experiment was started               |
+| `ABTEST_WINNER_DECLARED`     | `abtest.winner_declared`     | An A/B test winner was declared                  |
+| `MEMBER_CREATED`             | `member.created`             | A new member was created (via invitation accept) |
+| `GROUP_MEMBER_ADDED`         | `group.member.added`         | A member was added to a scope                    |
+| `EMAIL_COMPLAINED`           | `email.complained`           | A spam complaint was received                    |
 
 ### Signature verification details
 

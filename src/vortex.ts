@@ -23,8 +23,244 @@ declare const __SDK_VERSION__: string;
 const SDK_NAME = 'vortex-node-sdk';
 const SDK_VERSION = typeof __SDK_VERSION__ !== 'undefined' ? __SDK_VERSION__ : '0.8.2';
 
+/**
+ * Transform an InvitationScope from API wire format to SDK format.
+ * Adds scopeId as a preferred alias for groupId.
+ */
+function transformScope<T>(scope: T): T {
+  if (!scope || typeof scope !== 'object') return scope;
+  return {
+    ...(scope as any),
+    scopeId: (scope as any).groupId,
+  } as T;
+}
+
+/**
+ * Transform an invitation result from API wire format to SDK format.
+ * Adds scopes as a preferred alias for groups, with scopeId on each element.
+ */
+function transformInvitationResult<T>(result: T): T {
+  if (!result || typeof result !== 'object') return result;
+  const transformed = { ...result } as any;
+  if (Array.isArray(transformed.groups)) {
+    const mappedScopes = transformed.groups.map(transformScope);
+    transformed.scopes = mappedScopes;
+    transformed.groups = mappedScopes;
+  }
+  return transformed as T;
+}
+
+/**
+ * Transform an array of invitation results.
+ */
+function transformInvitationResults<T>(results: T[]): T[] {
+  return results.map(transformInvitationResult);
+}
+
+/**
+ * Transform a create invitation request from SDK format to API wire format.
+ * Maps scopes -> groups and scopeId -> groupId for the API.
+ */
+function transformCreateRequest(params: Record<string, any>): Record<string, any> {
+  const transformed = { ...params };
+
+  // Preferred: flat scopeId/scopeType/scopeName params (single scope)
+  if (transformed.scopeId && !transformed.groups && !transformed.scopes) {
+    transformed.groups = [
+      {
+        groupId: transformed.scopeId,
+        type: transformed.scopeType,
+        name: transformed.scopeName,
+      },
+    ];
+  }
+  delete transformed.scopeId;
+  delete transformed.scopeType;
+  delete transformed.scopeName;
+
+  // Legacy: array-based scopes -> groups
+  if (transformed.scopes && !transformed.groups) {
+    transformed.groups = transformed.scopes;
+  }
+  delete transformed.scopes;
+
+  // Map scopeId -> groupId in each scope object (if someone used scopeId in array form)
+  if (Array.isArray(transformed.groups)) {
+    transformed.groups = transformed.groups.map((g: any) => {
+      const { scopeId, ...rest } = g;
+      return {
+        ...rest,
+        groupId: rest.groupId || scopeId,
+      };
+    });
+  }
+  return transformed;
+}
+
 export class Vortex {
   constructor(private apiKey: string) {}
+
+  /**
+   * Parse the API key into its components (kid and raw key).
+   * API key format: VRTX.<base64url-encoded-uuid>.<key>
+   */
+  private parseApiKey(): { kid: string; key: string } {
+    const [prefix, encodedId, key] = this.apiKey.split('.');
+    if (!prefix || !encodedId || !key) {
+      throw new Error('Invalid API key format');
+    }
+    if (prefix !== 'VRTX') {
+      throw new Error('Invalid API key prefix');
+    }
+    const kid = uuidStringify(Buffer.from(encodedId, 'base64url'));
+    return { kid, key };
+  }
+
+  /**
+   * Derive the signing key from the API key components.
+   * signingKey = HMAC-SHA256(key, kid)
+   */
+  private deriveSigningKey(key: string, kid: string): Buffer {
+    return crypto.createHmac('sha256', key).update(kid).digest();
+  }
+
+  /**
+   * Build the canonical user payload from a User object.
+   * This produces the same shape as UnsignedData (userId, userEmail, etc.)
+   * with keys sorted alphabetically for cross-language consistency.
+   */
+  private buildCanonicalPayload(user: User): Record<string, any> {
+    const payload: Record<string, any> = {
+      userId: user.id,
+    };
+
+    if (user.email) {
+      payload.userEmail = user.email;
+    }
+
+    // Prefer new property names (name/avatarUrl), fall back to deprecated (userName/userAvatarUrl)
+    const userName = user.name ?? user.userName;
+    const userAvatarUrl = user.avatarUrl ?? user.userAvatarUrl;
+
+    if (userName) {
+      payload.name = userName;
+    }
+
+    if (userAvatarUrl) {
+      payload.avatarUrl = userAvatarUrl;
+    }
+
+    if (user.adminScopes && user.adminScopes.length > 0) {
+      payload.adminScopes = user.adminScopes;
+    }
+
+    if (user.allowedEmailDomains && user.allowedEmailDomains.length > 0) {
+      payload.allowedEmailDomains = user.allowedEmailDomains;
+    }
+
+    // Include any additional custom properties
+    const knownKeys = new Set([
+      'id',
+      'email',
+      'name',
+      'avatarUrl',
+      'userName',
+      'userAvatarUrl',
+      'adminScopes',
+      'allowedEmailDomains',
+    ]);
+    for (const [k, v] of Object.entries(user)) {
+      if (!knownKeys.has(k) && v !== undefined) {
+        payload[k] = v;
+      }
+    }
+
+    // Sort keys for canonical JSON (cross-language determinism)
+    const sorted: Record<string, any> = {};
+    for (const k of Object.keys(payload).sort()) {
+      sorted[k] = payload[k];
+    }
+    return sorted;
+  }
+
+  /**
+   * Recursively canonicalize a value by sorting object keys at all levels.
+   * This avoids using the `replacer` array parameter of JSON.stringify,
+   * which would otherwise filter out nested properties.
+   */
+  private static canonicalizeValue(value: any): any {
+    if (value === null || typeof value !== 'object') {
+      return value;
+    }
+
+    // Handle objects with toJSON (e.g., Date) — mirrors JSON.stringify behavior
+    if (typeof value.toJSON === 'function') {
+      return Vortex.canonicalizeValue(value.toJSON());
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item) => Vortex.canonicalizeValue(item));
+    }
+
+    // Use null-prototype object to prevent prototype pollution via __proto__ keys
+    const result: Record<string, any> = Object.create(null);
+    const keys = Object.keys(value).sort();
+
+    for (const key of keys) {
+      // Skip dangerous prototype keys
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        continue;
+      }
+      const v = (value as Record<string, any>)[key];
+      if (typeof v === 'undefined' || typeof v === 'function' || typeof v === 'symbol') {
+        continue;
+      }
+      result[key] = Vortex.canonicalizeValue(v);
+    }
+
+    return result;
+  }
+
+  /**
+   * Produce the canonical JSON string for a user payload.
+   * Keys are sorted alphabetically at all nesting levels and no extra
+   * whitespace is used. This must match across all SDKs and the backend
+   * verifier.
+   */
+  static canonicalJson(obj: Record<string, any>): string {
+    const canonical = Vortex.canonicalizeValue(obj);
+    return JSON.stringify(canonical);
+  }
+
+  /**
+   * Sign a user object for use with the `signature` widget prop.
+   *
+   * The returned string should be passed as the `signature` prop alongside
+   * the `user` prop on VortexInvite (or other widget components). The widget
+   * and backend handle everything else.
+   *
+   * @param user - User object (same shape as generateJwt)
+   * @returns Signature string in `kid:hexDigest` format
+   *
+   * @example
+   * ```typescript
+   * const vortex = new Vortex(process.env.VORTEX_API_KEY);
+   * const signature = vortex.sign({ id: 'user-123', email: 'user@example.com' });
+   * // Pass to frontend:
+   * // <VortexInvite user={{ userId: 'user-123', userEmail: 'user@example.com' }} signature={signature} />
+   * ```
+   */
+  sign(user: User): string {
+    if (!user.id && !(user as any).userId) {
+      throw new Error('userId (or id) is required for signing');
+    }
+    const { kid, key } = this.parseApiKey();
+    const signingKey = this.deriveSigningKey(key, kid);
+    const canonical = this.buildCanonicalPayload(user);
+    const data = Vortex.canonicalJson(canonical);
+    const digest = crypto.createHmac('sha256', signingKey).update(data).digest('hex');
+    return `${kid}:${digest}`;
+  }
 
   /**
    * Generate a JWT token for a user
@@ -46,26 +282,19 @@ export class Vortex {
    */
   generateJwt(params: { user: User; [key: string]: any }): string {
     const { user, ...rest } = params;
-    const [prefix, encodedId, key] = this.apiKey.split('.'); // prefix is just VRTX
-    if (!prefix || !encodedId || !key) {
-      throw new Error('Invalid API key format');
-    }
-    if (prefix !== 'VRTX') {
-      throw new Error('Invalid API key prefix');
-    }
-    const id = uuidStringify(Buffer.from(encodedId, 'base64url'));
+    const { kid, key } = this.parseApiKey();
 
     const expires = Math.floor(Date.now() / 1000) + 3600;
 
     // 🔐 Step 1: Derive signing key from API key + ID
-    const signingKey = crypto.createHmac('sha256', key).update(id).digest(); // <- raw Buffer
+    const signingKey = this.deriveSigningKey(key, kid);
 
     // 🧱 Step 2: Build header + payload
     const header = {
       iat: Math.floor(Date.now() / 1000),
       alg: 'HS256',
       typ: 'JWT',
-      kid: id,
+      kid,
     };
 
     // Build payload with user data
@@ -77,18 +306,20 @@ export class Vortex {
       identifiers: user.email ? [{ type: 'email', value: user.email }] : [],
     };
 
-    // Add userName if present
-    if (user.userName) {
-      payload.userName = user.userName;
+    // Add name if present (prefer new property, fall back to deprecated)
+    const userName = user.name ?? user.userName;
+    if (userName) {
+      payload.name = userName;
     }
 
-    // Add userAvatarUrl if present
-    if (user.userAvatarUrl) {
-      payload.userAvatarUrl = user.userAvatarUrl;
+    // Add avatarUrl if present (prefer new property, fall back to deprecated)
+    const userAvatarUrl = user.avatarUrl ?? user.userAvatarUrl;
+    if (userAvatarUrl) {
+      payload.avatarUrl = userAvatarUrl;
     }
 
     // Add adminScopes if present
-    if (user.adminScopes) {
+    if (user.adminScopes && user.adminScopes.length > 0) {
       payload.adminScopes = user.adminScopes;
       // Add widget compatibility fields for autojoin admin
       if (user.adminScopes.includes('autojoin')) {
@@ -188,14 +419,15 @@ export class Vortex {
         targetValue,
       },
     })) as { invitations: InvitationResultBase[] };
-    return response.invitations;
+    return transformInvitationResults(response.invitations);
   }
 
   async getInvitation(invitationId: string): Promise<InvitationResult> {
-    return this.vortexApiRequest({
+    const result = await this.vortexApiRequest({
       method: 'GET',
       path: `/api/v1/invitations/${invitationId}`,
-    }) as Promise<InvitationResult>;
+    });
+    return transformInvitationResult(result as InvitationResult);
   }
 
   async revokeInvitation(invitationId: string): Promise<{}> {
@@ -291,7 +523,7 @@ export class Vortex {
         } as AcceptInvitationRequest,
         path: `/api/v1/invitations/accept`,
       })) as InvitationResult;
-      return response;
+      return transformInvitationResult(response);
     }
 
     // New User format
@@ -310,7 +542,7 @@ export class Vortex {
       } as AcceptInvitationRequest,
       path: `/api/v1/invitations/accept`,
     })) as InvitationResult;
-    return response;
+    return transformInvitationResult(response);
   }
 
   /**
@@ -328,26 +560,53 @@ export class Vortex {
     return this.acceptInvitations([invitationId], user);
   }
 
+  /**
+   * @deprecated Use deleteInvitationsByScope instead
+   */
   async deleteInvitationsByGroup(groupType: string, groupId: string): Promise<{}> {
+    return this.deleteInvitationsByScope(groupType, groupId);
+  }
+
+  /**
+   * @deprecated Use getInvitationsByScope instead
+   */
+  async getInvitationsByGroup(groupType: string, groupId: string): Promise<InvitationResult[]> {
+    return this.getInvitationsByScope(groupType, groupId);
+  }
+
+  /**
+   * Delete all invitations for a specific scope
+   * @param scopeType - The type of scope (e.g., "team", "organization")
+   * @param scope - The scope identifier (customer's scope ID)
+   * @returns Empty object
+   */
+  async deleteInvitationsByScope(scopeType: string, scope: string): Promise<{}> {
     return this.vortexApiRequest({
       method: 'DELETE',
-      path: `/api/v1/invitations/by-group/${groupType}/${groupId}`,
+      path: `/api/v1/invitations/by-scope/${scopeType}/${scope}`,
     }) as Promise<{}>;
   }
 
-  async getInvitationsByGroup(groupType: string, groupId: string): Promise<InvitationResult[]> {
+  /**
+   * Get all invitations for a specific scope
+   * @param scopeType - The type of scope (e.g., "team", "organization")
+   * @param scope - The scope identifier (customer's scope ID)
+   * @returns Array of invitation results
+   */
+  async getInvitationsByScope(scopeType: string, scope: string): Promise<InvitationResult[]> {
     const response = (await this.vortexApiRequest({
       method: 'GET',
-      path: `/api/v1/invitations/by-group/${groupType}/${groupId}`,
+      path: `/api/v1/invitations/by-scope/${scopeType}/${scope}`,
     })) as { invitations: InvitationResult[] };
-    return response.invitations;
+    return transformInvitationResults(response.invitations);
   }
 
   async reinvite(invitationId: string): Promise<InvitationResult> {
-    return this.vortexApiRequest({
+    const result = await this.vortexApiRequest({
       method: 'POST',
       path: `/api/v1/invitations/${invitationId}/reinvite`,
-    }) as Promise<InvitationResult>;
+    });
+    return transformInvitationResult(result as InvitationResult);
   }
 
   /**
@@ -397,11 +656,15 @@ export class Vortex {
    * ```
    */
   async configureAutojoin(params: ConfigureAutojoinRequest): Promise<AutojoinDomainsResponse> {
-    return this.vortexApiRequest({
+    const response = (await this.vortexApiRequest({
       method: 'POST',
       path: '/api/v1/invitations/autojoin',
       body: params as unknown as ApiRequestBody,
-    }) as Promise<AutojoinDomainsResponse>;
+    })) as AutojoinDomainsResponse;
+    if (response.invitation) {
+      response.invitation = transformInvitationResult(response.invitation);
+    }
+    return response;
   }
 
   /**
@@ -420,7 +683,11 @@ export class Vortex {
    * @param params.inviter.userId - Your internal user ID for the inviter
    * @param params.inviter.userEmail - Optional email of the inviter
    * @param params.inviter.name - Optional display name of the inviter
-   * @param params.groups - Optional groups/scopes to associate with the invitation
+   * @param params.scopeId - The scope ID in your system (preferred)
+   * @param params.scopeType - The scope type (e.g., "team", "organization")
+   * @param params.scopeName - The display name of the scope
+   * @param params.scopes - @deprecated Use scopeId/scopeType/scopeName instead
+   * @param params.groups - @deprecated Use scopeId/scopeType/scopeName instead
    * @param params.source - Optional source for analytics (defaults to 'api')
    * @param params.subtype - Optional subtype for analytics segmentation (e.g., 'pymk', 'find-friends')
    * @param params.templateVariables - Optional template variables for email customization
@@ -435,7 +702,9 @@ export class Vortex {
    *   widgetConfigurationId: 'widget-config-123',
    *   target: { type: 'email', value: 'invitee@example.com' },
    *   inviter: { userId: 'user-456', userEmail: 'inviter@example.com', name: 'John Doe' },
-   *   groups: [{ type: 'team', groupId: 'team-789', name: 'Engineering' }],
+   *   scopeId: 'team-789',
+   *   scopeType: 'team',
+   *   scopeName: 'Engineering',
    *   unfurlConfig: {
    *     title: 'Join the Engineering team!',
    *     description: 'John Doe invited you to collaborate on Engineering',
@@ -457,10 +726,11 @@ export class Vortex {
    * ```
    */
   async createInvitation(params: CreateInvitationRequest): Promise<CreateInvitationResponse> {
+    const transformedParams = transformCreateRequest(params);
     return this.vortexApiRequest({
       method: 'POST',
       path: '/api/v1/invitations',
-      body: params as unknown as ApiRequestBody,
+      body: transformedParams as unknown as ApiRequestBody,
     }) as Promise<CreateInvitationResponse>;
   }
 
@@ -488,7 +758,9 @@ export class Vortex {
    * console.log(`Processed ${result.processed} invitations`);
    * ```
    */
-  async syncInternalInvitation(params: SyncInternalInvitationRequest): Promise<SyncInternalInvitationResponse> {
+  async syncInternalInvitation(
+    params: SyncInternalInvitationRequest
+  ): Promise<SyncInternalInvitationResponse> {
     return this.vortexApiRequest({
       method: 'POST',
       path: '/api/v1/invitations/sync-internal-invitation',

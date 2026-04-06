@@ -8,28 +8,45 @@ export type InvitationTarget = {
 };
 
 /**
- * GroupInput is used when creating JWTs - represents customer's group data
- * Supports both 'id' (legacy) and 'group_id' (preferred) for backward compatibility
+ * ScopeInput is used when creating JWTs - represents customer's scope data
+ * Supports both 'id' (legacy) and 'groupId' (preferred) for backward compatibility
  */
-export type GroupInput = {
+export type ScopeInput = {
   type: string;
-  id?: string; // Legacy field (deprecated, use group_id)
-  groupId?: string; // Preferred: Customer's group ID
+  /** @deprecated Use scopeId instead */
+  id?: string;
+  /** The scope identifier (preferred) */
+  scopeId?: string;
+  /** @deprecated Use scopeId instead */
+  groupId?: string;
   name: string;
 };
 
 /**
- * InvitationGroup represents a group in API responses
+ * @deprecated Use ScopeInput instead
+ */
+export type GroupInput = ScopeInput;
+
+/**
+ * InvitationScope represents a scope in API responses
  * This matches the MemberGroups table structure from the API
  */
-export type InvitationGroup = {
+export type InvitationScope = {
   id: string; // Vortex internal UUID
   accountId: string; // Vortex account ID
-  groupId: string; // Customer's group ID (the ID they provided to Vortex)
-  type: string; // Group type (e.g., "workspace", "team")
-  name: string; // Group name
-  createdAt: string; // ISO 8601 timestamp when the group was created
+  /** The customer's scope ID (preferred) */
+  scopeId: string;
+  /** @deprecated Use scopeId instead */
+  groupId: string;
+  type: string; // Scope type (e.g., "workspace", "team")
+  name: string; // Scope name
+  createdAt: string; // ISO 8601 timestamp when the scope was created
 };
+
+/**
+ * @deprecated Use InvitationScope instead
+ */
+export type InvitationGroup = InvitationScope;
 
 export type InvitationAcceptance = {
   id: string;
@@ -68,7 +85,10 @@ export type InvitationResultBase = {
   views: number;
   widgetConfigurationId: string;
   projectId: string;
-  groups: InvitationGroup[];
+  /** Scopes associated with this invitation (preferred) */
+  scopes: InvitationScope[];
+  /** @deprecated Use scopes instead */
+  groups: InvitationScope[];
   accepts: InvitationAcceptance[];
   expired: boolean;
   expires?: string;
@@ -81,7 +101,7 @@ export type InvitationResultBase = {
 
 /**
  * Full invitation result including target information.
- * Used by getInvitation, getInvitationsByGroup, and other endpoints that return targets.
+ * Used by getInvitation, getInvitationsByScope, and other endpoints that return targets.
  */
 export type InvitationResult = InvitationResultBase & {
   target: InvitationTarget[];
@@ -147,7 +167,13 @@ export type ApiRequestBody = AcceptInvitationRequest | AcceptInvitationRequestLe
 export type User = {
   id: string;
   email: string;
+  /** User's display name (preferred) */
+  name?: string;
+  /** User's avatar URL (preferred) */
+  avatarUrl?: string;
+  /** @deprecated Use `name` instead */
   userName?: string;
+  /** @deprecated Use `avatarUrl` instead */
   userAvatarUrl?: string;
   adminScopes?: string[];
   /**
@@ -213,23 +239,34 @@ export type Inviter = {
   userId: string;
   /** The email address of the person creating the invitation */
   userEmail?: string;
-  /** The display name of the person creating the invitation */
+  /** The display name of the person creating the invitation (preferred) */
+  name?: string;
+  /** Avatar URL for the person creating the invitation (preferred) */
+  avatarUrl?: string;
+  /** @deprecated Use `name` instead */
   userName?: string;
-  /** Avatar URL for the person creating the invitation */
+  /** @deprecated Use `avatarUrl` instead */
   userAvatarUrl?: string;
 };
 
 /**
- * Group information for creating invitations
+ * Scope information for creating invitations
  */
-export type CreateInvitationGroup = {
-  /** The type of the group/scope (e.g., "team", "organization", "project") */
+export type CreateInvitationScope = {
+  /** The type of the scope (e.g., "team", "organization", "project") */
   type: string;
-  /** The ID of the group/scope in your system */
-  groupId: string;
-  /** The display name of the group/scope */
+  /** The ID of the scope in your system (preferred) */
+  scopeId?: string;
+  /** @deprecated Use scopeId instead */
+  groupId?: string;
+  /** The display name of the scope */
   name: string;
 };
+
+/**
+ * @deprecated Use CreateInvitationScope instead
+ */
+export type CreateInvitationGroup = CreateInvitationScope;
 
 /**
  * Configuration for link unfurl (Open Graph) metadata
@@ -258,8 +295,16 @@ export type CreateInvitationRequest = {
   target: CreateInvitationTarget;
   /** Information about the user creating the invitation */
   inviter: Inviter;
-  /** Groups/scopes to associate with this invitation */
-  groups?: CreateInvitationGroup[];
+  /** The scope ID in your system (preferred — single scope per invitation) */
+  scopeId?: string;
+  /** The scope type (e.g., "team", "organization", "project") */
+  scopeType?: string;
+  /** The display name of the scope */
+  scopeName?: string;
+  /** @deprecated Use scopeId/scopeType/scopeName instead */
+  scopes?: CreateInvitationScope[];
+  /** @deprecated Use scopeId/scopeType/scopeName instead */
+  groups?: CreateInvitationScope[];
   /** The source of the invitation for analytics (e.g., "api", "backend", "pymk") */
   source?: string;
   /** Template variables for email customization */

@@ -5,10 +5,12 @@
 **Requires:** Node.js 22+
 
 ## Prerequisites
+
 From integration contract you need: API endpoint prefix, scope entity, authentication pattern
 From discovery data you need: Web framework (if any), database ORM, auth middleware pattern
 
 ## Key Facts
+
 - Base SDK for framework-agnostic Node.js integration
 - Client-based: instantiate `Vortex` class and call methods
 - All methods are async and return promises
@@ -42,6 +44,7 @@ VORTEX_API_KEY=VRTX.your-api-key-here.secret
 ## Step 3: Create Vortex Client Instance
 
 **TypeScript** (`src/lib/vortex-client.ts`):
+
 ```typescript
 import { Vortex } from '@teamvortexsoftware/vortex-node-22-sdk';
 
@@ -53,6 +56,7 @@ export const vortexClient = new Vortex(process.env.VORTEX_API_KEY);
 ```
 
 **JavaScript** (`src/lib/vortex-client.js`):
+
 ```javascript
 const { Vortex } = require('@teamvortexsoftware/vortex-node-22-sdk');
 
@@ -87,7 +91,7 @@ export async function getAuthenticatedUser(req: Request): Promise<AuthenticatedU
     return {
       id: decoded.userId,
       email: decoded.email,
-      isAdmin: decoded.role === 'admin'
+      isAdmin: decoded.role === 'admin',
     };
   }
 
@@ -105,12 +109,13 @@ export function toVortexUser(user: AuthenticatedUser) {
   return {
     id: user.id,
     email: user.email,
-    adminScopes: user.isAdmin ? ['autojoin'] : undefined
+    adminScopes: user.isAdmin ? ['autojoin'] : undefined,
   };
 }
 ```
 
 **Adapt to their patterns:**
+
 - Match their auth mechanism (JWT, sessions, custom)
 - Match their user structure
 - Match their admin detection logic
@@ -145,14 +150,14 @@ export async function handleJwtGeneration(
 
     // Parse request body for optional context
     let body = '';
-    req.on('data', chunk => body += chunk);
-    await new Promise(resolve => req.on('end', resolve));
+    req.on('data', (chunk) => (body += chunk));
+    await new Promise((resolve) => req.on('end', resolve));
 
     const context = body ? JSON.parse(body) : {};
 
     const jwt = await vortexClient.generateJwt({
       user: toVortexUser(user),
-      ...context // Optional: componentId, scope, scopeType
+      ...context, // Optional: componentId, scope, scopeType
     });
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -194,13 +199,15 @@ export async function handleGetInvitationsByTarget(
 
     if (!type || !value) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Missing type or value parameter', code: 'INVALID_REQUEST' }));
+      res.end(
+        JSON.stringify({ error: 'Missing type or value parameter', code: 'INVALID_REQUEST' })
+      );
       return;
     }
 
     const invitations = await vortexClient.getInvitationsByTarget({
       type: type as 'email' | 'phone',
-      value
+      value,
     });
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -261,8 +268,8 @@ export async function handleAcceptInvitations(
 
     // Parse request body
     let body = '';
-    req.on('data', chunk => body += chunk);
-    await new Promise(resolve => req.on('end', resolve));
+    req.on('data', (chunk) => (body += chunk));
+    await new Promise((resolve) => req.on('end', resolve));
 
     const { invitationIds, user } = JSON.parse(body);
 
@@ -271,53 +278,54 @@ export async function handleAcceptInvitations(
 
     // 2. CRITICAL - Add to your database
     const invitations = await Promise.all(
-      invitationIds.map(id => vortexClient.getInvitation(id))
+      invitationIds.map((id) => vortexClient.getInvitation(id))
     );
 
     for (const invitation of invitations) {
-      if (invitation.group) {
-        // Prisma example:
-        // await prisma.groupMembership.create({
-        //   data: {
-        //     userId: user.id,
-        //     groupId: invitation.group.id,
-        //     groupType: invitation.group.type,
-        //     role: invitation.role || 'member',
-        //     joinedAt: new Date()
-        //   }
-        // });
-
-        // TypeORM example:
-        // await groupMembershipRepository.save({
-        //   userId: user.id,
-        //   groupId: invitation.group.id,
-        //   groupType: invitation.group.type,
-        //   role: invitation.role || 'member',
-        //   joinedAt: new Date()
-        // });
-
-        // Sequelize example:
-        // await GroupMembership.create({
-        //   userId: user.id,
-        //   groupId: invitation.group.id,
-        //   groupType: invitation.group.type,
-        //   role: invitation.role || 'member',
-        //   joinedAt: new Date()
-        // });
-
-        // Raw SQL example:
-        // await query(
-        //   'INSERT INTO group_memberships (user_id, group_type, group_id, role) VALUES ($1, $2, $3, $4)',
-        //   [user.id, invitation.group.type, invitation.group.id, invitation.role || 'member']
-        // );
+      if (invitation.groups && invitation.groups.length > 0) {
+        for (const scope of invitation.groups) {
+          // Prisma example:
+          // await prisma.scopeMembership.create({
+          //   data: {
+          //     userId: user.id,
+          //     scopeId: scope.groupId,
+          //     scopeType: scope.type,
+          //     role: invitation.role || 'member',
+          //     joinedAt: new Date()
+          //   }
+          // });
+          // TypeORM example:
+          // await scopeMembershipRepository.save({
+          //   userId: user.id,
+          //   scopeId: scope.groupId,
+          //   scopeType: scope.type,
+          //   role: invitation.role || 'member',
+          //   joinedAt: new Date()
+          // });
+          // Sequelize example:
+          // await ScopeMembership.create({
+          //   userId: user.id,
+          //   scopeId: scope.groupId,
+          //   scopeType: scope.type,
+          //   role: invitation.role || 'member',
+          //   joinedAt: new Date()
+          // });
+          // Raw SQL example:
+          // await query(
+          //   'INSERT INTO scope_memberships (user_id, scope_type, scope_id, role) VALUES ($1, $2, $3, $4)',
+          //   [user.id, scope.type, scope.groupId, invitation.role || 'member']
+          // );
+        }
       }
     }
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      success: true,
-      acceptedCount: invitationIds.length
-    }));
+    res.end(
+      JSON.stringify({
+        success: true,
+        acceptedCount: invitationIds.length,
+      })
+    );
   } catch (error) {
     console.error('Accept invitations error:', error);
     res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -327,6 +335,7 @@ export async function handleAcceptInvitations(
 ```
 
 **Critical - Adapt database logic:**
+
 - Use their actual table/model names (from discovery)
 - Use their actual field names
 - Use their ORM pattern (Prisma, TypeORM, Sequelize, raw SQL)
@@ -458,6 +467,7 @@ curl -X POST http://localhost:3000/api/vortex/jwt \
 ```
 
 Expected response:
+
 ```json
 {
   "jwt": "eyJhbGciOiJIUzI1NiIs..."
@@ -475,11 +485,13 @@ Expected response:
 **User not added to database** → Must implement database logic in accept handler (see Step 7)
 
 **TypeScript errors with Vortex types** → Import types explicitly:
+
 ```typescript
 import type { User, InvitationTarget } from '@teamvortexsoftware/vortex-node-22-sdk';
 ```
 
 **CORS errors** → Add CORS headers to responses:
+
 ```typescript
 res.setHeader('Access-Control-Allow-Origin', 'http://localhost:3001');
 res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE');
@@ -492,13 +504,15 @@ res.setHeader('Access-Control-Allow-Credentials', 'true');
 ## After Implementation Report
 
 List files created/modified:
+
 - Client: src/lib/vortex-client.ts
 - Auth: src/lib/auth-helpers.ts
-- Handlers: src/handlers/*.ts (jwt, invitation, accept, delete)
+- Handlers: src/handlers/\*.ts (jwt, invitation, accept, delete)
 - Routes: src/server.ts
 - Database: Accept endpoint creates memberships in [table name]
 
 Confirm:
+
 - Vortex client instance created
 - All handler functions implemented
 - Accept invitations includes database logic
@@ -509,6 +523,7 @@ Confirm:
 ## Endpoints Registered
 
 All endpoints at `/api/vortex`:
+
 - `POST /jwt` - Generate JWT for authenticated user
 - `GET /invitations` - Get invitations by target
 - `GET /invitations/:id` - Get invitation by ID

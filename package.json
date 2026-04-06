@@ -2,7 +2,7 @@
   "name": "@teamvortexsoftware/vortex-node-22-sdk",
   "description": "Vortex Node 22 SDK",
   "author": "@teamvortexsoftware",
-  "version": "0.10.0",
+  "version": "0.14.0",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -27,16 +27,24 @@
     "check-types": "tsgo --noEmit",
     "distclean": "rm -rf ./dist ./dist.d",
     "clean": "rm -rf ./dist",
-    "dev": "tsup --watch",
+    "dev": "tsc -p tsconfig.dts.json && tsup --watch",
     "test": "jest",
     "package": "pnpm run build && cd dist/vortex-node-22-sdk && npm pack",
-    "build": "tsup"
+    "build": "tsup && tsc -p tsconfig.dts.json"
   },
   "jest": {
     "rootDir": "__tests__",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "tsconfig": "<rootDir>/../tsconfig.json",
+          "compilerOptions": {
+            "moduleResolution": "bundler"
+          }
+        }
+      ]
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"

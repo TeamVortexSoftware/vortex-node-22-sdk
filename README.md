@@ -65,6 +65,70 @@ const signature = vortex.sign({
 - The `user` prop works in development without a signature, so you can add `signature` when you're ready for production — no code rewrite needed
 - Uses HMAC-SHA256 with your API key's signing key. Unlike JWTs, signed-data tokens have no built-in expiry — signatures remain valid until the API key is rotated. Use `generateJwt()` if you need short-lived, non-replayable tokens with explicit expiry
 
+### Sign a payload for secure widget authentication (Recommended)
+
+The `generateToken()` method generates a signed token for use with Vortex widgets. This is the **recommended approach** for production deployments as it provides flexible security — you choose exactly what data to include in the signed token.
+
+```ts
+const vortex = new Vortex(process.env.VORTEX_API_KEY);
+
+// Minimal: sign just the user ID (required for secure attribution)
+const token = vortex.generateToken({
+  user: { id: 'user-123' },
+});
+
+// Full payload: sign everything for maximum security
+const token = vortex.generateToken({
+  component: 'widget-abc-123',
+  user: {
+    id: 'user-123',
+    name: 'Peter Pezaris',
+    email: 'peter@example.com',
+  },
+  scope: 'workspace_456',
+  vars: { company_name: 'Acme Corp' },
+});
+
+// Custom expiration (default is 5 minutes)
+const token = vortex.generateToken(
+  { user: { id: 'user-123' } },
+  { expiresIn: '1h' } // Accepts: '5m', '1h', '24h', '7d', or seconds as number
+);
+```
+
+**Frontend usage:**
+
+Pass the token to your Vortex widget via the `token` prop. Any fields not included in the signed payload can be provided in `window.vortex` — the widget will merge them securely.
+
+```html
+<script type="module">
+  // Fetch token from your backend (implement this function)
+  async function initVortex() {
+    const response = await fetch('/api/vortex-token');
+    const { token } = await response.json();
+
+    window.vortex = {
+      token,
+      component: 'widget-abc-123', // Can be signed or unsigned
+      trigger: '#invite-button',
+      // user.id MUST match what's in the token
+      user: { id: 'user-123', name: 'Peter' },
+      scope: 'workspace_456',
+      vars: { company_name: 'Acme Corp' },
+    };
+  }
+  initVortex();
+</script>
+<script async src="https://component.vortexsoftware.com/vortex.iife.js"></script>
+```
+
+**Security notes:**
+
+- `user.id` is the only field **required** for secure attribution — always include it in the signed payload for production
+- If `user.id` is missing from the payload, the SDK will log a warning
+- The token includes `exp` (expiry) and `iat` (issued at) claims automatically
+- Fields in the signed token take precedence — if the same field appears in both the token and `window.vortex` with different values, it's an error
+
 ### Generate a JWT for use with the Vortex Widget
 
 Let's assume you have an express powered API and a user that is looking to invite others and you have a Vortex widget embedded on a component in your frontend codebase. Your frontend will need to provide a JWT to the Vortex widget which allows Vortex to validate the user making the request.
@@ -329,16 +393,40 @@ app.post('/signup', async (req, res) => {
   }
 
   // YOUR signup logic, whatever it may be
-  await myApp.doSignupLogic(email);
+  const isNewUser = await myApp.doSignupLogic(email);
 
   // Accept the invitation if one was provided
   if (invitationId) {
-    await vortex.acceptInvitation(invitationId, { email });
+    await vortex.acceptInvitation(invitationId, {
+      email,
+      isExisting: !isNewUser, // Track if user was already registered
+    });
   }
 
   // continue with post-signup activity
   res.redirect(302, '/app');
 });
+```
+
+#### Tracking new vs existing users
+
+The `isExisting` field helps you track whether invitation accepts come from new signups or existing users. This is useful for analytics to understand your invitation conversion funnel.
+
+```ts
+// New user signup
+await vortex.acceptInvitation(invitationId, {
+  email: 'newuser@example.com',
+  isExisting: false,
+});
+
+// Existing user accepting an invitation
+await vortex.acceptInvitation(invitationId, {
+  email: 'existinguser@example.com',
+  isExisting: true,
+});
+
+// If unknown, omit the field (defaults to null in analytics)
+await vortex.acceptInvitation(invitationId, { email: 'user@example.com' });
 ```
 
 ### Accept multiple invitations

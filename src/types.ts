@@ -115,6 +115,14 @@ export type AcceptUser = {
   email?: string;
   phone?: string;
   name?: string;
+  /**
+   * Whether the accepting user is an existing user in your system.
+   * Set to true if the user was already registered before accepting the invitation.
+   * Set to false if this is a new user signup.
+   * Leave undefined if unknown.
+   * Used for analytics to track new vs existing user conversions.
+   */
+  isExisting?: boolean;
 };
 
 export type AcceptInvitationRequest = {
@@ -333,4 +341,57 @@ export type CreateInvitationResponse = {
   status: string;
   /** When the invitation was created */
   createdAt: string;
+};
+
+/**
+ * User object for generateToken - flexible structure
+ * Only `id` is required for secure attribution
+ */
+export type GenerateTokenUser = {
+  /** User ID - required for secure attribution */
+  id: string | number;
+  /** User's email address */
+  email?: string;
+  /** User's display name */
+  name?: string;
+  /** User's phone number */
+  phone?: string;
+  /** User's avatar URL */
+  avatarUrl?: string;
+  /** Additional custom properties */
+  [key: string]: any;
+};
+
+/**
+ * Payload structure for generateToken method
+ * All fields are optional - sign only what you need
+ */
+export type GenerateTokenData = {
+  /** Widget component ID */
+  component?: string;
+  /** DOM selector for trigger button */
+  trigger?: string;
+  /** DOM selector for embed container */
+  embed?: string;
+  /** User information - include `id` for secure attribution */
+  user?: GenerateTokenUser;
+  /** Scope/workspace identifier */
+  scope?: string;
+  /** Template variables for customization */
+  vars?: Record<string, any>;
+  /** Additional custom properties */
+  [key: string]: any;
+};
+
+/**
+ * Options for generateToken method
+ */
+export type GenerateTokenOptions = {
+  /**
+   * Token expiration time
+   * - String format: '5m', '1h', '24h', '7d' (minutes, hours, days)
+   * - Number format: seconds
+   * - Default: '5m' (5 minutes)
+   */
+  expiresIn?: string | number;
 };

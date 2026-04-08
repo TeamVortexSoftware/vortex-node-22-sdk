@@ -15,6 +15,8 @@ import {
   CreateInvitationResponse,
   SyncInternalInvitationRequest,
   SyncInternalInvitationResponse,
+  GenerateTokenData,
+  GenerateTokenOptions,
 } from './types';
 
 // SDK identification for request tracking
@@ -349,6 +351,130 @@ export class Vortex {
     ).toString('base64url');
     const jwt = `${toSign}.${signature}`;
     return jwt;
+  }
+
+  /**
+   * Parse an expiration time string or number into seconds
+   * Supports: '5m', '1h', '24h', '7d' or raw seconds as number
+   */
+  private parseExpiresIn(expiresIn: string | number): number {
+    if (typeof expiresIn === 'number') {
+      if (!Number.isFinite(expiresIn) || !Number.isInteger(expiresIn) || expiresIn <= 0) {
+        throw new Error(
+          `Invalid expiresIn value: "${expiresIn}". Numeric expiresIn must be a positive integer number of seconds.`
+        );
+      }
+      return expiresIn;
+    }
+
+    const match = expiresIn.match(/^(\d+)(m|h|d)$/);
+    if (!match) {
+      throw new Error(
+        `Invalid expiresIn format: "${expiresIn}". Use format like "5m", "1h", "24h", "7d" or a number of seconds.`
+      );
+    }
+
+    const value = parseInt(match[1], 10);
+    if (value <= 0) {
+      throw new Error(
+        `Invalid expiresIn value: "${expiresIn}". Duration must be positive (e.g., "5m", "1h", "7d").`
+      );
+    }
+    const unit = match[2];
+
+    switch (unit) {
+      case 'm':
+        return value * 60;
+      case 'h':
+        return value * 60 * 60;
+      case 'd':
+        return value * 60 * 60 * 24;
+      default:
+        throw new Error(`Unknown time unit: ${unit}`);
+    }
+  }
+
+  /**
+   * Sign a payload for use with Vortex widgets
+   *
+   * This method generates a signed JWT token containing your payload data.
+   * The token can be passed to widgets via the `token` prop to authenticate
+   * and authorize the request.
+   *
+   * @param payload - Data to sign (user, component, scope, vars, etc.)
+   * @param options - Optional configuration (expiresIn)
+   * @returns Signed JWT token string
+   *
+   * @example
+   * ```typescript
+   * const vortex = new Vortex(process.env.VORTEX_API_KEY);
+   *
+   * // Sign just the user (minimum for secure attribution)
+   * const token = vortex.generateToken({
+   *   user: { id: 'user-123' }
+   * });
+   *
+   * // Sign full payload
+   * const token = vortex.generateToken({
+   *   component: 'widget-abc',
+   *   user: { id: 'user-123', name: 'Peter', email: 'peter@example.com' },
+   *   scope: 'workspace_456',
+   *   vars: { company_name: 'Acme' }
+   * });
+   *
+   * // Custom expiration (default is 5 minutes)
+   * const token = vortex.generateToken(
+   *   { user: { id: 'user-123' } },
+   *   { expiresIn: '1h' }  // or expiresIn: 3600 (seconds)
+   * );
+   * ```
+   */
+  generateToken(payload: GenerateTokenData, options?: GenerateTokenOptions): string {
+    // Warn if user.id is missing - invitations won't be securely attributed
+    // Use nullish check (not falsy) to allow id=0 as valid
+    if (payload.user?.id === undefined || payload.user?.id === null) {
+      console.warn(
+        "[Vortex SDK] Warning: signing payload without user.id means invitations won't be securely attributed to a user."
+      );
+    }
+
+    const { kid, key } = this.parseApiKey();
+
+    // Default expiry: 5 minutes
+    const expiresInSeconds =
+      options?.expiresIn !== undefined ? this.parseExpiresIn(options.expiresIn) : 5 * 60; // 5 minutes default
+
+    const now = Math.floor(Date.now() / 1000);
+    const expires = now + expiresInSeconds;
+
+    // Derive signing key from API key + ID (same as generateJwt)
+    const signingKey = this.deriveSigningKey(key, kid);
+
+    // Build JWT header
+    const header = {
+      alg: 'HS256',
+      typ: 'JWT',
+      kid,
+    };
+
+    // Build JWT payload - include the signed data plus standard claims
+    const jwtPayload = {
+      ...payload,
+      iat: now,
+      exp: expires,
+    };
+
+    // Base64URL encode header and payload
+    const headerB64 = Buffer.from(JSON.stringify(header)).toString('base64url');
+    const payloadB64 = Buffer.from(JSON.stringify(jwtPayload)).toString('base64url');
+
+    // Sign
+    const toSign = `${headerB64}.${payloadB64}`;
+    const signature = Buffer.from(
+      crypto.createHmac('sha256', signingKey).update(toSign).digest()
+    ).toString('base64url');
+
+    return `${toSign}.${signature}`;
   }
 
   async vortexApiRequest(options: {

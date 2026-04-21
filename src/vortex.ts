@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { stringify as uuidStringify } from 'uuid';
+import { VortexMethod, VortexPrimary } from './decorators';
 import {
   ApiRequestBody,
   ApiResponseJson,
@@ -16,6 +17,7 @@ import {
   SyncInternalInvitationRequest,
   SyncInternalInvitationResponse,
   GenerateTokenData,
+  GenerateJwtOptions,
   GenerateTokenOptions,
 } from './types';
 
@@ -235,23 +237,46 @@ export class Vortex {
   }
 
   /**
-   * Sign a user object for use with the `signature` widget prop.
+   * Sign a user object for use with the `signature` component prop.
+   *
+   * **Note:** For new integrations, prefer `generateToken()` which offers more
+   * flexibility (custom expiration, additional payload data, scopes).
    *
    * The returned string should be passed as the `signature` prop alongside
-   * the `user` prop on VortexInvite (or other widget components). The widget
+   * the `user` prop on VortexInvite (or other components). The component
    * and backend handle everything else.
    *
-   * @param user - User object (same shape as generateJwt)
+   * @param user - User data to sign (must include `id`, optionally `email`, `name`, `avatarUrl`)
    * @returns Signature string in `kid:hexDigest` format
    *
    * @example
    * ```typescript
+   * // --- Backend (Node.js/Express) ---
+   * import { Vortex } from '@teamvortexsoftware/vortex-node-22-sdk';
+   *
    * const vortex = new Vortex(process.env.VORTEX_API_KEY);
-   * const signature = vortex.sign({ id: 'user-123', email: 'user@example.com' });
-   * // Pass to frontend:
-   * // <VortexInvite user={{ userId: 'user-123', userEmail: 'user@example.com' }} signature={signature} />
+   *
+   * app.get('/api/invite-data', (req, res) => {
+   *   const user = { id: req.user.id, email: req.user.email };
+   *   const signature = vortex.sign(user);
+   *   res.json({ user, signature });
+   * });
+   *
+   * // --- Frontend (React) ---
+   * import { VortexInvite } from '@teamvortexsoftware/vortex-react';
+   *
+   * function InvitePage() {
+   *   const { data } = useFetch('/api/invite-data');
+   *   return (
+   *     <VortexInvite
+   *       user={data.user}
+   *       signature={data.signature}
+   *     />
+   *   );
+   * }
    * ```
    */
+  @VortexMethod({ category: 'authentication', since: '0.5.0', internal: true })
   sign(user: User): string {
     if (!user.id && !(user as any).userId) {
       throw new Error('userId (or id) is required for signing');
@@ -269,6 +294,7 @@ export class Vortex {
    *
    * @param params - Object containing user and optional additional properties
    * @param params.user - User object with id, email, and optional adminScopes
+   * @param options - Optional configuration (expiresIn)
    * @returns JWT token string
    *
    * @example
@@ -280,20 +306,31 @@ export class Vortex {
    *     adminScopes: ['autojoin']
    *   }
    * });
+   *
+   * // With custom expiration
+   * const tokenWithCustomExpiry = vortex.generateJwt(
+   *   { user: { id: "user-123", email: "user@example.com" } },
+   *   { expiresIn: '24h' }  // Custom expiration (default: 30 days)
+   * );
    * ```
    */
-  generateJwt(params: { user: User; [key: string]: any }): string {
+  @VortexMethod({ category: 'authentication', since: '0.3.0' })
+  generateJwt(params: { user: User; [key: string]: any }, options?: GenerateJwtOptions): string {
     const { user, ...rest } = params;
     const { kid, key } = this.parseApiKey();
 
-    const expires = Math.floor(Date.now() / 1000) + 3600;
+    const expiresInSeconds =
+      options?.expiresIn !== undefined ? this.parseExpiresIn(options.expiresIn) : 2592000; // 30 days default
+
+    const now = Math.floor(Date.now() / 1000);
+    const expires = now + expiresInSeconds;
 
     // 🔐 Step 1: Derive signing key from API key + ID
     const signingKey = this.deriveSigningKey(key, kid);
 
     // 🧱 Step 2: Build header + payload
     const header = {
-      iat: Math.floor(Date.now() / 1000),
+      iat: now,
       alg: 'HS256',
       typ: 'JWT',
       kid,
@@ -407,28 +444,42 @@ export class Vortex {
    *
    * @example
    * ```typescript
+   * // --- Backend (Node.js/Express) ---
+   * import { Vortex } from '@teamvortexsoftware/vortex-node-22-sdk';
+   *
    * const vortex = new Vortex(process.env.VORTEX_API_KEY);
    *
-   * // Sign just the user (minimum for secure attribution)
-   * const token = vortex.generateToken({
-   *   user: { id: 'user-123' }
+   * app.get('/api/invite-token', (req, res) => {
+   *   const token = vortex.generateToken({
+   *     user: { id: req.user.id, email: req.user.email }
+   *   });
+   *   res.json({ token });
    * });
    *
-   * // Sign full payload
-   * const token = vortex.generateToken({
-   *   component: 'widget-abc',
-   *   user: { id: 'user-123', name: 'Peter', email: 'peter@example.com' },
-   *   scope: 'workspace_456',
-   *   vars: { company_name: 'Acme' }
-   * });
+   * // --- Frontend (React) ---
+   * import { VortexInvite } from '@teamvortexsoftware/vortex-react';
    *
-   * // Custom expiration (default is 5 minutes)
+   * function InvitePage() {
+   *   const { data } = useFetch('/api/invite-token');
+   *   return <VortexInvite token={data.token} />;
+   * }
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // With additional options
    * const token = vortex.generateToken(
-   *   { user: { id: 'user-123' } },
-   *   { expiresIn: '1h' }  // or expiresIn: 3600 (seconds)
+   *   {
+   *     user: { id: 'user-123', name: 'Peter', email: 'peter@example.com' },
+   *     scope: 'workspace_456',           // Scope invitations to a workspace/team
+   *     vars: { company_name: 'Acme' }    // Template variables for emails
+   *   },
+   *   { expiresIn: '1h' }  // Custom expiration (default: 30 days)
    * );
    * ```
    */
+  @VortexPrimary()
+  @VortexMethod({ category: 'authentication', since: '0.8.0' })
   generateToken(payload: GenerateTokenData, options?: GenerateTokenOptions): string {
     // Warn if user.id is missing - invitations won't be securely attributed
     // Use nullish check (not falsy) to allow id=0 as valid
@@ -442,7 +493,7 @@ export class Vortex {
 
     // Default expiry: 5 minutes
     const expiresInSeconds =
-      options?.expiresIn !== undefined ? this.parseExpiresIn(options.expiresIn) : 5 * 60; // 5 minutes default
+      options?.expiresIn !== undefined ? this.parseExpiresIn(options.expiresIn) : 30 * 24 * 60 * 60; // 30 days default
 
     const now = Math.floor(Date.now() / 1000);
     const expires = now + expiresInSeconds;
@@ -533,6 +584,19 @@ export class Vortex {
     }
   }
 
+  /**
+   * Get invitations by target (email, username, or phone number)
+   *
+   * @param targetType - The type of target identifier
+   * @param targetValue - The target value to search for
+   * @returns Array of invitation results matching the target
+   *
+   * @example
+   * ```typescript
+   * const invitations = await vortex.getInvitationsByTarget('email', 'user@example.com');
+   * ```
+   */
+  @VortexMethod({ category: 'invitations', since: '0.1.0' })
   async getInvitationsByTarget(
     targetType: 'email' | 'username' | 'phoneNumber',
     targetValue: string
@@ -548,6 +612,20 @@ export class Vortex {
     return transformInvitationResults(response.invitations);
   }
 
+  /**
+   * Get a single invitation by ID
+   *
+   * @param invitationId - The invitation ID to retrieve
+   * @returns The invitation details
+   *
+   * @example
+   * ```typescript
+   * const invitation = await vortex.getInvitation('inv-123');
+   * console.log(invitation.status);
+   * ```
+   */
+  @VortexPrimary()
+  @VortexMethod({ category: 'invitations', since: '0.1.0' })
   async getInvitation(invitationId: string): Promise<InvitationResult> {
     const result = await this.vortexApiRequest({
       method: 'GET',
@@ -556,6 +634,18 @@ export class Vortex {
     return transformInvitationResult(result as InvitationResult);
   }
 
+  /**
+   * Revoke (delete) an invitation
+   *
+   * @param invitationId - The invitation ID to revoke
+   * @returns Empty object on success
+   *
+   * @example
+   * ```typescript
+   * await vortex.revokeInvitation('inv-123');
+   * ```
+   */
+  @VortexMethod({ category: 'invitations', since: '0.1.0' })
   async revokeInvitation(invitationId: string): Promise<{}> {
     return this.vortexApiRequest({
       method: 'DELETE',
@@ -600,7 +690,19 @@ export class Vortex {
     targets: InvitationTarget[]
   ): Promise<InvitationResult>;
 
-  // Implementation
+  /**
+   * Accept one or more invitations for a user
+   *
+   * @param invitationIds - Array of invitation IDs to accept
+   * @param userOrTarget - User object with email or phone, or legacy target format
+   * @returns The accepted invitation result
+   *
+   * @example
+   * ```typescript
+   * await vortex.acceptInvitations(['inv-123'], { email: 'user@example.com' });
+   * ```
+   */
+  @VortexMethod({ category: 'invitations', since: '0.1.0' })
   async acceptInvitations(
     invitationIds: string[],
     userOrTarget: AcceptUser | InvitationTarget | InvitationTarget[]
@@ -682,20 +784,44 @@ export class Vortex {
    * await vortex.acceptInvitation('inv-123', { email: 'user@example.com', name: 'John' });
    * ```
    */
+  @VortexPrimary()
+  @VortexMethod({ category: 'invitations', since: '0.6.0' })
   async acceptInvitation(invitationId: string, user: AcceptUser): Promise<InvitationResult> {
     return this.acceptInvitations([invitationId], user);
   }
 
   /**
+   * Delete all invitations for a specific group
+   *
    * @deprecated Use deleteInvitationsByScope instead
+   * @param groupType - The type of group (e.g., "team", "organization")
+   * @param groupId - The group identifier
+   * @returns Empty object
    */
+  @VortexMethod({
+    category: 'invitations',
+    since: '0.1.0',
+    deprecated: true,
+    deprecationMessage: 'Use deleteInvitationsByScope instead',
+  })
   async deleteInvitationsByGroup(groupType: string, groupId: string): Promise<{}> {
     return this.deleteInvitationsByScope(groupType, groupId);
   }
 
   /**
+   * Get all invitations for a specific group
+   *
    * @deprecated Use getInvitationsByScope instead
+   * @param groupType - The type of group (e.g., "team", "organization")
+   * @param groupId - The group identifier
+   * @returns Array of invitation results
    */
+  @VortexMethod({
+    category: 'invitations',
+    since: '0.1.0',
+    deprecated: true,
+    deprecationMessage: 'Use getInvitationsByScope instead',
+  })
   async getInvitationsByGroup(groupType: string, groupId: string): Promise<InvitationResult[]> {
     return this.getInvitationsByScope(groupType, groupId);
   }
@@ -705,7 +831,13 @@ export class Vortex {
    * @param scopeType - The type of scope (e.g., "team", "organization")
    * @param scope - The scope identifier (customer's scope ID)
    * @returns Empty object
+   *
+   * @example
+   * ```typescript
+   * await vortex.deleteInvitationsByScope('team', 'team-123');
+   * ```
    */
+  @VortexMethod({ category: 'invitations', since: '0.4.0' })
   async deleteInvitationsByScope(scopeType: string, scope: string): Promise<{}> {
     return this.vortexApiRequest({
       method: 'DELETE',
@@ -718,7 +850,13 @@ export class Vortex {
    * @param scopeType - The type of scope (e.g., "team", "organization")
    * @param scope - The scope identifier (customer's scope ID)
    * @returns Array of invitation results
+   *
+   * @example
+   * ```typescript
+   * const invitations = await vortex.getInvitationsByScope('team', 'team-123');
+   * ```
    */
+  @VortexMethod({ category: 'invitations', since: '0.4.0' })
   async getInvitationsByScope(scopeType: string, scope: string): Promise<InvitationResult[]> {
     const response = (await this.vortexApiRequest({
       method: 'GET',
@@ -727,6 +865,18 @@ export class Vortex {
     return transformInvitationResults(response.invitations);
   }
 
+  /**
+   * Resend an invitation (reinvite)
+   *
+   * @param invitationId - The invitation ID to resend
+   * @returns The updated invitation
+   *
+   * @example
+   * ```typescript
+   * const invitation = await vortex.reinvite('inv-123');
+   * ```
+   */
+  @VortexMethod({ category: 'invitations', since: '0.2.0' })
   async reinvite(invitationId: string): Promise<InvitationResult> {
     const result = await this.vortexApiRequest({
       method: 'POST',
@@ -748,6 +898,7 @@ export class Vortex {
    * console.log(result.autojoinDomains); // [{ id: '...', domain: 'acme.com' }]
    * ```
    */
+  @VortexMethod({ category: 'autojoin', since: '0.6.0' })
   async getAutojoinDomains(scopeType: string, scope: string): Promise<AutojoinDomainsResponse> {
     return this.vortexApiRequest({
       method: 'GET',
@@ -767,7 +918,7 @@ export class Vortex {
    * @param params.scopeType - The type of scope (e.g., "organization", "team")
    * @param params.scopeName - Optional display name for the scope
    * @param params.domains - Array of domains to configure for autojoin
-   * @param params.widgetId - The widget configuration ID
+   * @param params.componentId - The component ID
    * @returns Updated autojoin domains and associated invitation
    *
    * @example
@@ -777,10 +928,11 @@ export class Vortex {
    *   scopeType: 'organization',
    *   scopeName: 'Acme Corporation',
    *   domains: ['acme.com', 'acme.org'],
-   *   widgetId: 'widget-123',
+   *   componentId: 'component-123',
    * });
    * ```
    */
+  @VortexMethod({ category: 'autojoin', since: '0.6.0' })
   async configureAutojoin(params: ConfigureAutojoinRequest): Promise<AutojoinDomainsResponse> {
     const response = (await this.vortexApiRequest({
       method: 'POST',
@@ -851,6 +1003,7 @@ export class Vortex {
    * });
    * ```
    */
+  @VortexMethod({ category: 'invitations', since: '0.7.0', internal: true })
   async createInvitation(params: CreateInvitationRequest): Promise<CreateInvitationResponse> {
     const transformedParams = transformCreateRequest(params);
     return this.vortexApiRequest({
@@ -884,6 +1037,7 @@ export class Vortex {
    * console.log(`Processed ${result.processed} invitations`);
    * ```
    */
+  @VortexMethod({ category: 'invitations', since: '0.7.0' })
   async syncInternalInvitation(
     params: SyncInternalInvitationRequest
   ): Promise<SyncInternalInvitationResponse> {

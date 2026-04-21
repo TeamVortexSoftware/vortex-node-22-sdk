@@ -62,14 +62,14 @@ describe('Vortex.generateToken()', () => {
     });
   });
 
-  describe('default expiration (5 minutes)', () => {
-    it('should default to 5 minute expiration', () => {
+  describe('default expiration (30 days)', () => {
+    it('should default to 30 day expiration', () => {
       const token = vortex.generateToken({ user: { id: 'user-1' } });
 
       const [, payloadB64] = token.split('.');
       const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
 
-      const expectedExp = payload.iat + 5 * 60; // 5 minutes
+      const expectedExp = payload.iat + 30 * 24 * 60 * 60; // 30 days
       expect(payload.exp).toBe(expectedExp);
     });
   });

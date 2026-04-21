@@ -89,6 +89,7 @@ describe('Scope Translation', () => {
       id: 'inv-1',
       accountId: 'acc-1',
       clickThroughs: 0,
+      formSubmissionData: null,
       configurationAttributes: null,
       attributes: null,
       createdAt: '2025-01-01T00:00:00Z',

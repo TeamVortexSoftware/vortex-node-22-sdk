@@ -19,7 +19,8 @@
     "noUnusedParameters": false,
     "preserveWatchOutput": true,
     "skipLibCheck": true,
-    "strict": true
+    "strict": true,
+    "experimentalDecorators": true
   },
   "include": ["./src/**/*"],
   "exclude": ["node_modules", "dist"]

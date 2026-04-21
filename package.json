@@ -2,7 +2,7 @@
   "name": "@teamvortexsoftware/vortex-node-22-sdk",
   "description": "Vortex Node 22 SDK",
   "author": "@teamvortexsoftware",
-  "version": "0.16.0",
+  "version": "0.20.0",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -30,7 +30,10 @@
     "dev": "tsc -p tsconfig.dts.json && tsup --watch",
     "test": "jest",
     "package": "pnpm run build && cd dist/vortex-node-22-sdk && npm pack",
-    "build": "tsup && tsc -p tsconfig.dts.json"
+    "build": "tsup && tsc -p tsconfig.dts.json",
+    "extract:manifest": "ts-node --esm bin/extract-manifest.ts --out manifest.json",
+    "validate:manifest": "pnpm run extract:manifest && node ../../docs/schemas/validate-manifest.js manifest.json && rm manifest.json",
+    "generate:readme": "pnpm run extract:manifest && node ../../docs/generators/generate-readme.js manifest.json --out README.md && rm manifest.json"
   },
   "jest": {
     "rootDir": "__tests__",
@@ -61,6 +64,8 @@
     "eslint": "catalog:",
     "jest": "29.7.0",
     "ts-jest": "catalog:",
+    "ts-morph": "27.0.2",
+    "ts-node": "10.9.2",
     "tsup": "catalog:",
     "typescript-eslint": "catalog:"
   },
